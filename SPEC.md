@@ -83,7 +83,7 @@ Verification on every migration (manual or auto): row counts per facility,
 riwayat entries, lab count, checklist counts, archived count must match the
 source JSON; mismatches are logged and reported. After cutover, v1 stops
 saving and auto-migration becomes a no-op. The v1 app keeps running
-touched until E2E passes on v2.
+untouched until E2E passes on v2.
 
 ## v2 goals (beyond v1 behavior)
 1. Testable core: merge/parse logic in pure TS with Vitest unit tests — the

@@ -14,13 +14,13 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       zero native deps), `GET /api/health`, serve `web/dist` + SPA fallback.
       `scripts/migrate-v1.mjs` from `master_data.json` → SQLite — all 12 count
       checks PASS against real data (369 patients, 1317 riwayat, 233 labs).
-- [ ] **P2 — Merge core (pure TS, no I/O)** in `server/src/core/`:
-      filename parsing (facility + `DD-M-YY` date), registry/handover/lab
-      parsers, merge rules (latest-file-wins, riwayat append, telaah reset on
-      new day, same-day idempotency, out-of-order safety, auto
-      archive/unarchive on latest input, MR normalization). **Vitest unit
-      tests ported from v1 test assertions before any upload UI exists.**
-      This is the brain — it lands before the UI touches it.
+- [x] **P2 — Merge core (pure TS, no I/O)** in `server/src/core/`:
+      `types`, `text` (parseDate + Excel serials), `filename` (facility +
+      `DD-M-YY` date + input timestamp), `merge` (row identity, riwayat,
+      daily-task reset + logs, auto-archive), `parsers` (registry/handover/lab
+      incl. resistensi REPORT rows, eGFR/GD-POCT overrides, orphan-column
+      guard), `apply` (chronological batch + latest-input rules). **57 Vitest
+      tests green** — the brain, proven before any UI touches it.
 - [ ] **P3 — Frontend skeleton**: Vite + React + TS + Tailwind + TanStack
       Table; facility tabs (Nusin/Melati/Sakura/Observasi) + Archived +
       Rekap routes; connect to `/api/rows`; per-facility columns (Nusin gets

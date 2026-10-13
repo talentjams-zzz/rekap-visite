@@ -9,6 +9,7 @@
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm --filter web build && pnpm --filter server build",
     "start": "node server/dist/index.js",
-    "migrate": "node scripts/migrate-v1.ts"
+    "migrate": "node scripts/migrate-v1.ts",
+    "test": "pnpm --filter server test"
   }
 }
