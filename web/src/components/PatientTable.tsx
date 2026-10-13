@@ -93,8 +93,11 @@ function RiwayatBadge({
   const n = row.dayCount - 1;
   if (n <= 0) return null;
   return (
-    <button className="text-xs text-teal-700 hover:underline" onClick={() => onToggle(row)}>
-      {open ? '▲' : '▼'} ({n})
+    <button
+      className="whitespace-nowrap text-xs text-teal-700 hover:underline"
+      onClick={() => onToggle(row)}
+    >
+      {open ? '▲' : '▼'} Riwayat ({n})
     </button>
   );
 }
@@ -255,7 +258,23 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
     return [
       col.accessor((r) => r.tglRegistrasi,
         { id: 'tglRegistrasi', header: 'Tgl Reg', size: 110, cell: (info) => <TglRegCell value={info.getValue()} /> }),
-      col.accessor((r) => r.dateAdded, { id: 'dateAdded', header: 'Tgl Input', size: 95 }),
+      // v1 places the Riwayat button INSIDE the Tgl Input cell, right by the
+      // date (2nd column — visible without scrolling). A far-away unlabeled
+      // badge column is how the team "lost" the feature.
+      col.accessor((r) => r.dateAdded, {
+        id: 'dateAdded',
+        header: 'Tgl Input',
+        size: 175,
+        cell: (info) => {
+          const row = info.row.original;
+          return (
+            <span className="flex flex-wrap items-center gap-x-1.5">
+              <span>{row.dateAdded ?? ''}</span>
+              <RiwayatBadge row={row} open={expanded?.id === row.id} onToggle={toggleRiwayat} />
+            </span>
+          );
+        },
+      }),
       col.accessor((r) => r.mr, { id: 'mr', header: 'MR', size: 90 }),
       ...(showFacility
         ? [col.accessor((r) => r.facility, { id: 'facility', header: 'Facility', size: 90 })]
@@ -316,18 +335,6 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         size: 180,
         cell: (info) => (
           <AsoCell row={info.row.original} onChange={handlers.onAsoChange} />
-        ),
-      }),
-      col.display({
-        id: 'riwayat',
-        header: 'Riwayat',
-        size: 80,
-        cell: (info) => (
-          <RiwayatBadge
-            row={info.row.original}
-            open={expanded?.id === info.row.original.id}
-            onToggle={toggleRiwayat}
-          />
         ),
       }),
       col.display({

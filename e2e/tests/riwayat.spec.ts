@@ -37,7 +37,7 @@ test('riwayat keeps one snapshot per day; manual diagnosis edit lands in current
   expect(row.dayCount).toBe(2);
 
   // Badge shows 1 past day; expanding lists it with the edited diagnosis.
-  const badge = page.locator('table tbody button', { hasText: '▼ (1)' }).first();
+  const badge = page.locator('table tbody button', { hasText: 'Riwayat (1)' }).first();
   await badge.click();
   await page.waitForSelector('text=Riwayat (past days)');
   const histTable = page.locator('table table tbody tr').first();
