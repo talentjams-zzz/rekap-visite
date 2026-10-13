@@ -48,7 +48,7 @@ export function AsoCell({
                   placeholder="Med name"
                   onChange={(e) => set(idx, { name: e.target.value })}
                 />
-                <div className="mt-0.5 flex items-center gap-1">
+                <div className="mt-0.5 flex items-center gap-1 break-words">
                   <input
                     type="date"
                     className={`rounded border px-1 py-0.5 text-xs ${

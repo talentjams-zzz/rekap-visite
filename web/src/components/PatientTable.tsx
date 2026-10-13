@@ -138,8 +138,15 @@ function Header({ table }: { table: Table<RowDto> }) {
         hg.headers.map((header) => {
           const canSort = header.column.getCanSort();
           const dir = header.column.getIsSorted();
+          // The width MUST come from the column state — without it the
+          // resize handler updates state that no element renders (the classic
+          // "I can drag but nothing happens" bug).
           return (
-            <th key={header.id} className="relative p-0 select-none">
+            <th
+              key={header.id}
+              className="relative p-0 select-none"
+              style={{ width: header.getSize() }}
+            >
               <div className="flex items-center gap-1 p-2">
                 <button
                   className="flex-1 text-left disabled:cursor-default"
@@ -154,10 +161,13 @@ function Header({ table }: { table: Table<RowDto> }) {
                   )}
                 </button>
                 {header.column.getCanResize() && (
+                  // Wide, visible grip at the column's right edge — every column
+                  // is resizable; drag it to size freely (persisted per tab).
                   <span
                     onMouseDown={header.getResizeHandler()}
                     onTouchStart={header.getResizeHandler()}
-                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-zinc-200 hover:bg-teal-400"
+                    title="Drag to resize"
+                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-l border-zinc-300 bg-zinc-100 hover:bg-teal-400"
                   />
                 )}
               </div>
@@ -403,7 +413,17 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
 
   return (
     <div className="overflow-x-auto rounded-b border border-t-0 border-zinc-300 bg-white">
-      <table className="w-full border-collapse text-sm">
+      {/* table-fixed: column widths are exactly what the user resizes them to
+          (auto layout let long content push resized columns back out). No
+          w-full: the table is exactly the sum of its (resizable) columns and
+          the wrapper scrolls. */}
+      {/* width = sum of the (resizable) column sizes: table-fixed + width
+          auto would fill the container and proportionally squish every
+          resized column back down. The wrapper scrolls horizontally. */}
+      <table
+        className="table-fixed border-collapse text-sm"
+        style={{ width: table.getTotalSize() }}
+      >
         <thead>
           <Header table={table} />
         </thead>
@@ -412,7 +432,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
             <Fragment key={row.id}>
               <tr className="border-b border-zinc-100 hover:bg-teal-50/40">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="p-2 align-top">
+                  <td key={cell.id} className="overflow-hidden p-2 align-top">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
