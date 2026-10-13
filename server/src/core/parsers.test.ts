@@ -140,6 +140,60 @@ describe('parseHandover', () => {
     expect(r.operan).toBe('Op');
   });
 
+  it('handover NEVER overwrites registry identity fields (doctor-name variants)', () => {
+    const state = emptyState();
+    // Registry: canonical spelling, as typed by the facility system.
+    parseRegistry(state, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. Putri, Sp.B', '', 'F', 'V', 'Mawar', '3']]), '2026-08-26', '2026-08-26 08:00:00');
+    const r = state.rows[0];
+    // Operan sheet: hand-typed variants of the same data.
+    parseHandover(
+      state, F,
+      [{ name: 'S1', rows: [HO_HEADERS, ['Mawar', '4', 'AYSHA BINTI', '104640', 'dr Putri SpB', 'Pneumonia', 'Op', 'Ter']] }],
+      '2026-08-26', '2026-08-26 09:00:00', 'operan nusin 26-08-26.xlsx',
+    );
+    // D/O/T from the handover…
+    expect(r.diagnosis).toBe('Pneumonia');
+    expect(r.operan).toBe('Op');
+    expect(r.terapi).toBe('Ter');
+    // …but registry identity fields untouched (the old bug: operan's
+    // "dr Putri SpB" clobbered the registry's "dr. Putri, Sp.B").
+    expect(r.dokter).toBe('dr. Putri, Sp.B');
+    expect(r.nama).toBe('Aysha');
+    expect(r.kamar).toBe('Mawar');
+    expect(r.bed).toBe('3');
+  });
+
+  it('day snapshot = registry fields + handover D/O/T, in either load order', () => {
+    // Registry first, then handover.
+    const a = emptyState();
+    parseRegistry(a, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. Putri, Sp.B', '', 'F', 'V', 'Mawar', '3']]), '2026-08-26', '2026-08-26 08:00:00');
+    parseHandover(
+      a, F,
+      [{ name: 'S1', rows: [HO_HEADERS, ['Mawar', '3', 'Aysha', '104640', 'dr Putri SpB', 'Pneumonia', 'Op', 'Ter']] }],
+      '2026-08-26', '2026-08-26 09:00:00', 'operan nusin 26-08-26.xlsx',
+    );
+    const snapA = a.rows[0].history.find((h) => h.date === '2026-08-26')!;
+    expect(snapA).toMatchObject({
+      nama: 'Aysha', dokter: 'dr. Putri, Sp.B', kamar: 'Mawar',
+      diagnosis: 'Pneumonia', operan: 'Op', terapi: 'Ter',
+    });
+
+    // Handover first (patient known from an earlier day), then registry.
+    const b = emptyState();
+    parseRegistry(b, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. Putri, Sp.B', '', 'F', 'V', 'Mawar', '3']]), '2026-08-25', '2026-08-25 08:00:00');
+    parseHandover(
+      b, F,
+      [{ name: 'S1', rows: [HO_HEADERS, ['Mawar', '3', 'Aysha', '104640', 'dr Putri SpB', 'Pneumonia', 'Op', 'Ter']] }],
+      '2026-08-26', '2026-08-26 09:00:00', 'operan nusin 26-08-26.xlsx',
+    );
+    parseRegistry(b, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. Putri, Sp.B', '', 'F', 'V', 'Mawar', '3']]), '2026-08-26', '2026-08-26 08:30:00');
+    const snapB = b.rows[0].history.find((h) => h.date === '2026-08-26')!;
+    expect(snapB).toMatchObject({
+      nama: 'Aysha', dokter: 'dr. Putri, Sp.B', kamar: 'Mawar',
+      diagnosis: 'Pneumonia', operan: 'Op', terapi: 'Ter',
+    });
+  });
+
   it('falls back to the column after OPERAN when the TERAPI header is blank', () => {
     const state = emptyState();
     parseHandover(

@@ -46,6 +46,44 @@ export function buildRegistryFile(
   return p;
 }
 
+export interface HandoverPatient {
+  mr: string;
+  nama: string;
+  kamar?: string;
+  bed?: string;
+  dokter?: string;
+  diagnosis?: string;
+  operan?: string;
+  terapi?: string;
+}
+
+/**
+ * Handover (operan) file — Nusin only. Filename: operan {facility} {DD-MM-YY}.xlsx.
+ * Only Diagnosis/Operan/Terapi may land on an existing row; identity fields
+ * (nama/dokter/kamar/bed) must stay as the registry wrote them.
+ */
+export function buildHandoverFile(
+  dir: string,
+  facility: string,
+  ddmmyy: string,
+  patients: HandoverPatient[],
+): string {
+  const rows: unknown[][] = [
+    [`Operan ${facility}`],
+    ['Kamar', 'Bed', 'NAMA', 'MEDREC', 'DPJP', 'DIAGNOSA', 'OPERAN', 'TERAPI'],
+    ...patients.map((p, i) => [
+      p.kamar ?? '101', p.bed ?? String(i + 1), p.nama, p.mr, p.dokter ?? 'dr. Hand',
+      p.diagnosis ?? 'D', p.operan ?? 'O', p.terapi ?? 'T',
+    ]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  const p = path.join(dir, `operan ${facility} ${ddmmyy}.xlsx`);
+  XLSX.writeFile(wb, p);
+  return p;
+}
+
 export interface LabTestIn {
   nama: string;
   hasil: string;

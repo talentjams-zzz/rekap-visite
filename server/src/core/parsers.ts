@@ -153,15 +153,17 @@ function flushHandoverPatient(
     // advanceLastSeen=false: the handover file is a subset of the patients,
     // so it must not move this row onto the facility's "latest input".
     touchRowDate(existing, reportDate, inputTs, false);
+    // ONLY diagnosis/operan/terapi come from the handover file (v1 contract).
+    // Nama/Dokter/Kamar/Bed stay as the REGISTRY (facility data) wrote them:
+    // the operan sheet is typed by hand at handover and carries inconsistent
+    // variants (e.g. many spellings of the same doctor's name).
     if (p.diagnosis) existing.diagnosis = p.diagnosis;
     if (p.operan) existing.operan = p.operan;
     if (p.terapi) existing.terapi = p.terapi;
-    if (p.dokter) existing.dokter = p.dokter;
-    if (p.nama) existing.nama = p.nama;
-    if (p.kamar) existing.kamar = p.kamar;
-    if (p.bed) existing.bed = p.bed;
+    // Snapshot: D/O/T only — recordHistory merges per-field, so the
+    // registry's own fields in that day's snapshot are untouched (in either
+    // load order).
     recordHistory(existing, reportDate, {
-      nama: p.nama, kamar: p.kamar, bed: p.bed, dokter: p.dokter,
       diagnosis: p.diagnosis, operan: p.operan, terapi: p.terapi,
     });
     result.merged++;
