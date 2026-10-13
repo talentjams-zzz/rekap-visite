@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchRows, patchAso, patchRow, postPatientCheck, postRowCheck } from './api';
 import { PatientTable } from './components/PatientTable';
+import { Rekap } from './components/Rekap';
 import { TabBar } from './components/TabBar';
 import { UploadBar } from './components/UploadBar';
 import {
@@ -28,6 +29,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [asoFilter, setAsoFilter] = useState(false);
+  // Archived-tab filters (v1 archiveFilterBar): facility + registration date range.
+  const [archFacility, setArchFacility] = useState('all');
+  const [archFrom, setArchFrom] = useState('');
+  const [archTo, setArchTo] = useState('');
 
   const notify = useCallback((msg: string, isError = false) => {
     const id = Date.now() + Math.random();
@@ -131,7 +136,15 @@ export default function App() {
 
   const shown =
     tab === 'archived'
-      ? archived
+      ? archived.filter((r) => {
+          if (archFacility !== 'all' && r.facility !== archFacility) return false;
+          // tglRegistrasi may carry a time part — compare date part only so a
+          // row on the boundary day is kept (v1 semantics).
+          const regDate = (r.tglRegistrasi || '').slice(0, 10);
+          if (archFrom && regDate < archFrom) return false;
+          if (archTo && regDate > archTo) return false;
+          return true;
+        })
       : active.filter((r) => r.facility === tab && (!asoFilter || asoDueCount(r) > 0));
 
   // v1 updateAsoAlertBanner: meds due to stop across ALL active patients.
@@ -158,9 +171,7 @@ export default function App() {
           {error && <p className="mb-2 rounded bg-red-100 p-2 text-red-800">API error: {error}</p>}
           {loading && <p className="text-zinc-500">Loading…</p>}
           {!loading && !error && tab === 'rekap' && (
-            <div className="rounded border border-zinc-300 bg-white p-6 text-zinc-500">
-              Rekap Checklist — aggregates land in P7.
-            </div>
+            <Rekap onOpenMR={(_mr, t) => setTab(t)} />
           )}
           {!loading && !error && tab !== 'rekap' && (
             <>
@@ -176,6 +187,37 @@ export default function App() {
                   >
                     ASO ⚠ ({active.filter((r) => r.facility === tab && asoDueCount(r) > 0).length})
                   </button>
+                </div>
+              )}
+              {tab === 'archived' && (
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-zinc-500">Facility:</span>
+                  <select
+                    className="rounded border border-zinc-300 bg-white px-2 py-1"
+                    value={archFacility}
+                    onChange={(e) => setArchFacility(e.target.value)}
+                  >
+                    <option value="all">All</option>
+                    {FACILITIES.map((f) => (
+                      <option key={f} value={f}>
+                        {f.charAt(0).toUpperCase() + f.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="ml-2 text-zinc-500">Date from:</span>
+                  <input
+                    type="date"
+                    className="rounded border border-zinc-300 px-2 py-1"
+                    value={archFrom}
+                    onChange={(e) => setArchFrom(e.target.value)}
+                  />
+                  <span className="text-zinc-500">to:</span>
+                  <input
+                    type="date"
+                    className="rounded border border-zinc-300 px-2 py-1"
+                    value={archTo}
+                    onChange={(e) => setArchTo(e.target.value)}
+                  />
                 </div>
               )}
               <PatientTable

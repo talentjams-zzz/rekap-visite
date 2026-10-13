@@ -52,6 +52,15 @@ export const ROW_ITEM_KEYS = new Set(['telaah_resep', 'catatan_pengobatan', 'pio
 export const EDITABLE_KEYS = ['diagnosis', 'operan', 'terapi', 'pharmacistNote'] as const;
 export type EditableKey = (typeof EDITABLE_KEYS)[number];
 
+/** GET /api/rekap — v1 buildRekapData shape. */
+export interface RekapData {
+  totalPatients: number;
+  totals: Record<string, number>;
+  allKeys: string[];
+  byDate: Record<string, Record<string, { mrs: string[]; names: Record<string, string> }>>;
+  rowsByMR: Record<string, { facility: string; archived: boolean }>;
+}
+
 /** ASO = meds that must be stopped (v1 row.aso). */
 export interface AsoMed {
   id: string;

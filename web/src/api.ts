@@ -1,4 +1,4 @@
-import type { AsoMed, HistoryEntry, LabReport, RowDto } from './types';
+import type { AsoMed, HistoryEntry, LabReport, RekapData, RowDto } from './types';
 
 export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]> {
   const r = await fetch(`/api/rows?status=${status}`);
@@ -64,6 +64,13 @@ export async function patchAso(id: string, aso: AsoMed[]): Promise<void> {
     body: JSON.stringify({ aso }),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Rekap checklist aggregates (v1 buildRekapData). */
+export async function fetchRekap(): Promise<RekapData> {
+  const r = await fetch('/api/rekap');
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.json()) as RekapData;
 }
 
 /** Lab uploads: one or more lab-{MR}.xlsx files (latest per MR wins). */

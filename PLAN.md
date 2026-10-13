@@ -50,8 +50,13 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       Verified: banner 23 = v1 computation, upload round-trip replaced MR
       report, ASO med persisted. Faithfulness fix: all facilities get the full
       column set (v1 COLS_SHORT === COLS_FULL).
-- [ ] **P7 — Rekap + Archived filters**: rekap checklist aggregates; archived
-      tab facility column + facility dropdown + date-range filter.
+- [x] **P7 — Rekap + Archived filters**: `GET /api/rekap` (v1
+      buildRekapData: current checks + daily-log stamps per date, MRs
+      deduped; patient-level items) — verified byte-identical to v1
+      algorithm on real data (232 patients, 21 dates, all 7 totals match).
+      Rekap tab: stat cards + per-date breakdown + Copy MRs + MR tags that
+      jump to the row's tab. Archived tab: facility dropdown + Tgl Reg
+      date-range filter (date-part compare, v1 boundary semantics).
 - [ ] **P8 — E2E port**: v1 `test_*.py` → TypeScript Playwright in
       `e2e/`, driven against dev server with isolated DB (same approach as
       v1 `conftest.py`).

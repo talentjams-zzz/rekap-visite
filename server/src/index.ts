@@ -223,6 +223,93 @@ app.get('/api/rows', async (req) => {
   return out;
 });
 
+// ── Rekap (v1 buildRekapData) ──────────────────────────────────────────────
+// Row items: current check + archived log timestamps (a daily reset never
+// erases completed work from the rekap). Patient items: per-MR checks.
+// Grouped by date; MRs deduped per date+item.
+app.get('/api/rekap', async () => {
+  const patients = db.prepare('SELECT id, mr, nama, facility, archived FROM patients').all() as {
+    id: string;
+    mr: string;
+    nama: string | null;
+    facility: string;
+    archived: number;
+  }[];
+  const rowChecks = db.prepare('SELECT patient_id, item_key, checked_at FROM row_checklist').all() as {
+    patient_id: string;
+    item_key: string;
+    checked_at: string | null;
+  }[];
+  const logs = db.prepare('SELECT patient_id, item_key, ts FROM daily_logs').all() as {
+    patient_id: string;
+    item_key: string;
+    ts: string;
+  }[];
+  const patChecks = db.prepare('SELECT mr, item_key, checked_at FROM patient_checklist').all() as {
+    mr: string;
+    item_key: string;
+    checked_at: string | null;
+  }[];
+
+  const byId = new Map(patients.map((p) => [p.id, p]));
+  const byDate: Record<string, Record<string, { mrs: string[]; names: Record<string, string> }>> = {};
+  const addStamp = (mr: string, name: string, key: string, ts: string) => {
+    const date = ts.split(' ')[0];
+    const day = (byDate[date] ??= {});
+    const entry = (day[key] ??= { mrs: [], names: {} });
+    if (!entry.mrs.includes(mr)) {
+      entry.mrs.push(mr);
+      entry.names[mr] = name;
+    }
+  };
+
+  for (const c of rowChecks) {
+    if (!c.checked_at) continue;
+    const p = byId.get(c.patient_id);
+    if (p) addStamp(p.mr, String(p.nama ?? ''), c.item_key, c.checked_at);
+  }
+  for (const l of logs) {
+    const p = byId.get(l.patient_id);
+    if (p) addStamp(p.mr, String(p.nama ?? ''), l.item_key, l.ts);
+  }
+  for (const c of patChecks) {
+    if (!c.checked_at) continue;
+    const p = patients.find((x) => x.mr === c.mr);
+    addStamp(c.mr, p ? String(p.nama ?? '') : c.mr, c.item_key, c.checked_at);
+  }
+
+  const ROW_KEYS = ['telaah_resep', 'catatan_pengobatan', 'pio'];
+  const ALL_KEYS = [
+    ...ROW_KEYS,
+    'visite',
+    'pto',
+    'konseling',
+    'rekonsiliasi_obat',
+    'penelusuran_obat',
+  ];
+  const totals: Record<string, number> = {};
+  const uniqueMRS = new Set<string>();
+  for (const day of Object.values(byDate)) {
+    for (const [key, entry] of Object.entries(day)) {
+      totals[key] = (totals[key] ?? 0) + entry.mrs.length;
+      if (ROW_KEYS.includes(key)) entry.mrs.forEach((m) => uniqueMRS.add(m));
+    }
+  }
+
+  return {
+    totalPatients: uniqueMRS.size,
+    totals,
+    allKeys: ALL_KEYS,
+    byDate,
+    rowsByMR: Object.fromEntries(
+      patients.map((p) => [
+        p.mr,
+        { facility: p.facility, archived: Number(p.archived) === 1 },
+      ]),
+    ),
+  };
+});
+
 /** Force re-migration from the current v1 master file (ops endpoint). */
 app.post('/api/migrate', async () => {
   const src = loadMaster();
