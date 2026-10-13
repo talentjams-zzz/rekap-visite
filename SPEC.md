@@ -65,12 +65,25 @@ rebuild. This document supersedes it only where explicitly stated below.
 - Saves keep **optimistic concurrency** from v1: client sends `baseVersion`,
   server 409 on conflict, client re-fetches.
 
-## Migration
-One-shot `scripts/migrate-v1.mjs`: read v1 `master_data.json` → SQLite.
-Verification: row counts per facility, total riwayat entries, lab count,
-checklist counts must match the source JSON; spot-check 5 patients against
-the v1 UI. Run against the real data **before cutover**. The v1 app keeps
-running untouched until E2E passes on v2.
+## Migration (manual + automatic)
+Core: `server/src/migrate.ts` (shared). CLI: `pnpm migrate`
+(`scripts/migrate-v1.ts`, `--force` to re-run over existing data).
+
+**Auto-migration from the latest `master_data.json`** (v1 stays the live
+source during transition):
+- On server **startup**: if `master_data.json` is newer than the last
+  migration (higher `version` or later `savedAt`), re-migrate automatically.
+- While running: the server **watches** `master_data.json` (default every 60s,
+  `REKAP_POLL_MS`) and re-migrates when v1 saves a newer version — no restart.
+- On demand: `POST /api/migrate` forces a re-migration; `GET /api/health`
+  reports `migration.upToDate` / `sourceVersion`.
+- Env: `REKAP_MASTER` (master file), `REKAP_DB` (db file).
+
+Verification on every migration (manual or auto): row counts per facility,
+riwayat entries, lab count, checklist counts, archived count must match the
+source JSON; mismatches are logged and reported. After cutover, v1 stops
+saving and auto-migration becomes a no-op. The v1 app keeps running
+touched until E2E passes on v2.
 
 ## v2 goals (beyond v1 behavior)
 1. Testable core: merge/parse logic in pure TS with Vitest unit tests — the
