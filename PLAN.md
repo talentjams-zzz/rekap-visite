@@ -73,7 +73,7 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
 - [x] **P9 — Hardening**: optimistic-concurrency 409 handling in client,
       error toasts, empty states, maintenance job (monthly backup + cleanup),
       upload dedupe by sha256.
-- [ ] **P10 — Deploy & cutover**: `pnpm build`, systemd unit (or pm2) on the
+- [x] **P10 — Deploy & cutover**: `pnpm build`, systemd unit (or pm2) on the
       tailscale machine, run v2 alongside v1, verify with real data for one
       cycle, then switch the tailscale URL to v2. v1 stays frozen as
       fallback.

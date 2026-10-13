@@ -48,3 +48,28 @@ v1 reference: `reference/v1/index.html` parseLabFile/labAbnormal/asoDue*
 - Every phase ends: tests green + commit + push. Optimistic UI updates + reload on API failure.
 - `nowTs()` format everywhere: `YYYY-MM-DD HH:MM:SS` (client or server clock).
 
+## Deployment (P10 — live since 2026-10-13)
+- **Deploy dir:** `/home/rezza/projects/rekap-visite-v2` (git clone of this repo;
+  dev happens in the Orca worktree, production runs from here). Update =
+  `git pull && pnpm --filter server build && pnpm --filter web build && pm2 restart rekap-visite`.
+- **pm2 app** `rekap-visite` (ecosystem.config.cjs in the deploy dir): port **8787**
+  (v1's port — the pharmacy's existing tailscale URL `http://100.109.68.87:8787` now serves v2),
+  `REKAP_MASTER=/home/rezza/projects/rekap-visite-nusin/master_data.json` (shared with v1),
+  `REKAP_DB=<deploy>/data/rekap.db`, poll 60s, cleanup enabled.
+- **Data safety:** pre-deploy backup of the real master file kept as
+  `master_data.json.bak-pre-v2deploy-YYYYMMDD` next to the original.
+- **v1 ↔ v2 sync (both directions, verified live):** v1 save → v2 auto re-migrates
+  within the 60s poll (verified: v1 no-op save v61→v62, v2 health sourceVersion followed).
+  v2 change → **write-back** re-serializes master_data.json in v1's exact format
+  (version bumped, telaahLog/catatanLog/pioLog + colWidths carried through, atomic
+  write) — the frozen v1 app can load the file at any time (proven by e2e v1-compat
+  spec against the REAL v1 server.js).
+- **v1 fallback:** `cd /home/rezza/projects/rekap-visite-nusin && node server.js` —
+  stop/restart pm2's rekap-visite first if both need port 8787 (or run v1 on another
+  port: `node server.js 8797`). v1 reads the file v2 last wrote, so it starts current.
+- **Monthly maintenance:** runs automatically 1st of month 00:05 (backup .db copy in
+  the deploy data/ dir, verified, then archived rows removed); manual: 🧹 button or
+  `POST /api/maintenance/run`; status `GET /api/maintenance`.
+- **One-time TODO (needs sudo):** `pm2 startup` (paste the printed command) so pm2
+  (ezza + rekap) survives reboots; `pm2 save` is already done after every app change.
+
