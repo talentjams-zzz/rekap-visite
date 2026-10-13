@@ -220,8 +220,11 @@ export default function App() {
     tab === 'archived' ? 'Archived' : tab === 'rekap' ? 'Rekap Checklist' : tab.charAt(0).toUpperCase() + tab.slice(1);
 
   return (
-    <div className="min-h-screen bg-zinc-100 text-zinc-900">
-      <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-2">
+    // Full-height flex column: the page itself never scrolls; the table area
+    // is the scroll box, so its header row can stick (sticky inside a plain
+    // page scroll + overflow-x wrapper does not work).
+    <div className="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-900">
+      <header className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 py-2">
         <h1 className="text-lg font-semibold">
           Rekap Visite <span className="text-xs font-normal text-zinc-400">v2</span>
         </h1>
@@ -235,23 +238,31 @@ export default function App() {
         </button>
       </header>
       {asoTotal > 0 && (
-        <div className="flex items-center gap-2 bg-red-600 px-4 py-1.5 text-sm font-bold text-white">
+        <div className="flex shrink-0 items-center gap-2 bg-red-600 px-4 py-1.5 text-sm font-bold text-white">
           ⚠️ ASO Alert : {asoTotal} {asoTotal === 1 ? 'med' : 'meds'}
         </div>
       )}
-      <main className="mx-auto max-w-[1920px] p-4">
-        <TabBar tab={tab} onChange={setTab} counts={counts} />
-        <div className="mt-3">
-          {tab !== 'rekap' && <UploadBar onUploaded={reload} notify={notify} />}
-          {error && <p className="mb-2 rounded bg-red-100 p-2 text-red-800">API error: {error}</p>}
-          {loading && <p className="text-zinc-500">Loading…</p>}
+      <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col p-4">
+        <div className="shrink-0">
+          <TabBar tab={tab} onChange={setTab} counts={counts} />
+        </div>
+        <div className="mt-3 flex min-h-0 flex-1 flex-col">
+          {tab !== 'rekap' && (
+            <div className="shrink-0">
+              <UploadBar onUploaded={reload} notify={notify} />
+            </div>
+          )}
+          {error && <p className="mb-2 shrink-0 rounded bg-red-100 p-2 text-red-800">API error: {error}</p>}
+          {loading && <p className="shrink-0 text-zinc-500">Loading…</p>}
           {!loading && !error && tab === 'rekap' && (
-            <Rekap onOpenMR={(_mr, t) => setTab(t)} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <Rekap onOpenMR={(_mr, t) => setTab(t)} />
+            </div>
           )}
           {!loading && !error && tab !== 'rekap' && (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col">
               {tab !== 'archived' && (
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex shrink-0 items-center gap-2">
                   <button
                     className={`rounded border px-2 py-0.5 text-xs ${
                       asoFilter
@@ -265,7 +276,7 @@ export default function App() {
                 </div>
               )}
               {tab === 'archived' && (
-                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 text-xs">
                   <span className="text-zinc-500">Facility:</span>
                   <select
                     className="rounded border border-zinc-300 bg-white px-2 py-1"
@@ -295,20 +306,22 @@ export default function App() {
                   />
                 </div>
               )}
-              <PatientTable
-                rows={shown}
-                facility={tab === 'archived' ? 'all' : tab}
-                showFacility={tab === 'archived'}
-                onToggleCheck={handleToggleCheck}
-                onEditField={handleEditField}
-                onToggleArchive={handleToggleArchive}
-                onAsoChange={handleAsoChange}
-                notify={notify}
-              />
-              <p className="mt-2 text-xs text-zinc-400">
+              <div className="min-h-0 flex-1">
+                <PatientTable
+                  rows={shown}
+                  facility={tab === 'archived' ? 'all' : tab}
+                  showFacility={tab === 'archived'}
+                  onToggleCheck={handleToggleCheck}
+                  onEditField={handleEditField}
+                  onToggleArchive={handleToggleArchive}
+                  onAsoChange={handleAsoChange}
+                  notify={notify}
+                />
+              </div>
+              <p className="mt-2 shrink-0 text-xs text-zinc-400">
                 {title} — {shown.length} row(s)
               </p>
-            </>
+            </div>
           )}
         </div>
       </main>

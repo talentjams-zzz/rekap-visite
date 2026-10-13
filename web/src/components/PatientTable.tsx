@@ -133,7 +133,9 @@ function RiwayatTable({ days }: { days: HistoryEntry[] }) {
 
 function Header({ table }: { table: Table<RowDto> }) {
   return (
-    <tr className="border-b border-zinc-300 bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-600">
+    // The header row stays pinned to the top of the table's scroll box while
+    // the rows scroll under it (the user's "slider on top" request).
+    <tr className="text-left text-xs uppercase tracking-wide text-zinc-600">
       {table.getHeaderGroups().map((hg) =>
         hg.headers.map((header) => {
           const canSort = header.column.getCanSort();
@@ -144,7 +146,7 @@ function Header({ table }: { table: Table<RowDto> }) {
           return (
             <th
               key={header.id}
-              className="relative p-0 select-none"
+              className="sticky top-0 z-10 border-b border-zinc-300 bg-zinc-50 p-0 select-none"
               style={{ width: header.getSize() }}
             >
               <div className="flex items-center gap-1 p-2">
@@ -412,14 +414,13 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
   });
 
   return (
-    <div className="overflow-x-auto rounded-b border border-t-0 border-zinc-300 bg-white">
+    // The wrapper is the scroll box (both axes) — h-full inside the app's
+    // flex column. overflow-x-auto alone would make the sticky header inert.
+    <div className="h-full overflow-auto rounded-b border border-t-0 border-zinc-300 bg-white">
       {/* table-fixed: column widths are exactly what the user resizes them to
           (auto layout let long content push resized columns back out). No
-          w-full: the table is exactly the sum of its (resizable) columns and
-          the wrapper scrolls. */}
-      {/* width = sum of the (resizable) column sizes: table-fixed + width
-          auto would fill the container and proportionally squish every
-          resized column back down. The wrapper scrolls horizontally. */}
+          w-full: the table is exactly the sum of its (resizable) columns, so
+          resizing is not squished back; the wrapper scrolls both axes. */}
       <table
         className="table-fixed border-collapse text-sm"
         style={{ width: table.getTotalSize() }}

@@ -34,3 +34,38 @@ test('every column header has a resize grip and dragging resizes the column', as
   const after = (await th.boundingBox())!;
   expect(after.width).toBeGreaterThan(before.width + 40);
 });
+
+test('header row stays pinned at the top when the table scrolls', async ({
+  server,
+  page,
+}) => {
+  const { base, dir } = server;
+  // 30 patients → the table is taller than the viewport.
+  const patients = Array.from({ length: 30 }, (_, i) => ({
+    mr: String(600001 + i),
+    nama: `PATIENT ${String(i + 1).padStart(2, '0')}`,
+    tglReg: '2026-08-26 08:00:00',
+  }));
+  const f = buildRegistryFile(dir, 'nusin', '26-08-26', patients);
+  await page.goto(base, { waitUntil: 'load' });
+  await uploadFiles(page, [f]);
+  await waitRows(base, 'active', (r) => r.length === 30);
+
+  const header = page.locator('thead th').first();
+  const firstRow = page.locator('table tbody tr').nth(5);
+  const headerBefore = (await header.boundingBox())!;
+  const rowBefore = (await firstRow.boundingBox())!;
+
+  // Scroll the table's scroll box down.
+  await page.evaluate(() => {
+    const scroller = document.querySelector('main table')?.parentElement;
+    if (scroller) scroller.scrollTop = 600;
+  });
+  await page.waitForTimeout(150);
+
+  const headerAfter = (await header.boundingBox())!;
+  const rowAfter = (await firstRow.boundingBox())!;
+  // Header pinned (same position), rows scrolled away.
+  expect(Math.abs(headerAfter.y - headerBefore.y)).toBeLessThan(2);
+  expect(rowAfter.y).toBeLessThan(rowBefore.y - 300);
+});
