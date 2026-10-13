@@ -16,19 +16,21 @@ export interface Scratch {
 
 let nextPort = 8810;
 
-export async function startScratchServer(): Promise<Scratch> {
+export async function startScratchServer(seed?: Record<string, unknown>): Promise<Scratch> {
   const port = nextPort++;
   const dir = mkdtempSync(path.join(os.tmpdir(), 'rekap-e2e-'));
   writeFileSync(
     path.join(dir, 'master.json'),
-    JSON.stringify({
-      savedAt: '2026-01-01T00:00:00.000Z',
-      rows: [],
-      patientChecklist: {},
-      labResults: {},
-      facilityLatestInput: {},
-      version: 1,
-    }),
+    JSON.stringify(
+      seed ?? {
+        savedAt: '2026-01-01T00:00:00.000Z',
+        rows: [],
+        patientChecklist: {},
+        labResults: {},
+        facilityLatestInput: {},
+        version: 1,
+      },
+    ),
   );
   const child: ChildProcess = spawn('node', [path.join(ROOT, 'server/dist/index.js')], {
     cwd: ROOT,

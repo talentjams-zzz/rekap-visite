@@ -17,6 +17,7 @@ import { registerMaintenance } from './maintenance.js';
 import { labSummaryFrom, registerLabs } from './labs.js';
 import type { LabSummary } from './labs.js';
 import { registerUploads } from './uploads.js';
+import { writeBackToV1 } from './writeback.js';
 import type { AsoMed } from './core/types.js';
 import type { LabTest } from './core/parsers.js';
 
@@ -34,14 +35,26 @@ const schemaSql = readFileSync(path.join(root, 'server', 'schema.sql'), 'utf8');
 
 const events = registerEvents(app);
 await app.register(fastifyMultipart, { limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
-registerUploads(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
-registerLabs(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
-registerInteractions(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
+// Every v2 change: persist to v1's master_data.json (so the frozen v1
+// fallback always sees current state), then broadcast to live clients.
+function commit(reason?: string): void {
+  try {
+    const res = writeBackToV1(db, masterFile);
+    if (res) app.log.info({ reason, version: res.version, rows: res.rows }, 'write-back to v1 master file');
+  } catch (e) {
+    app.log.error({ err: e, reason }, 'write-back to v1 master file FAILED (DB state is authoritative)');
+  }
+  events.broadcast('change', { at: new Date().toISOString(), reason });
+}
+
+registerUploads(app, db, () => commit('upload'));
+registerLabs(app, db, () => commit('lab'));
+registerInteractions(app, db, () => commit('interaction'));
 registerMaintenance(
   app,
   db,
   process.env.REKAP_DB || path.join(process.cwd(), 'data', 'rekap.db'),
-  () => events.broadcast('change', { at: new Date().toISOString() }),
+  () => commit('maintenance'),
 );
 
 function loadMaster(): V1Master | null {
