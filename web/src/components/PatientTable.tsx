@@ -46,24 +46,10 @@ function TglRegCell({ value }: { value: string | null }) {
   );
 }
 
-/** Name cell: initials avatar + semibold name (the visual anchor of a row). */
+/** Name cell: semibold name (avatar removed at the user's request). */
 function NameCell({ value }: { value: string | null }) {
   if (!value) return <span className="text-slate-300">—</span>;
-  const initials = (value || '?')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
-  return (
-    <div className="flex items-center gap-2">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-[10px] font-bold text-white shadow-sm">
-        {initials}
-      </span>
-      <span className="truncate font-semibold text-slate-800">{value}</span>
-    </div>
-  );
+  return <span className="font-semibold text-slate-800">{value}</span>;
 }
 
 function ChecklistCell({ row, onToggleCheck }: { row: RowDto; onToggleCheck: Handlers['onToggleCheck'] }) {
@@ -544,6 +530,35 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
     };
   }, [ci?.isResizingColumn]);
 
+  // If the drag is released OUTSIDE the browser window (cursor over the
+  // taskbar or a second monitor), the mouseup never reaches document and
+  // TanStack's handler stays armed — the next click inside the window is
+  // what "finishes" the drag (users had to click outside the table on some
+  // columns). Safety net: when the cursor leaves the page or the window
+  // loses focus, dispatch a synthetic mouseup at the last cursor position;
+  // TanStack's own handler ends the drag there and disarms itself.
+  useEffect(() => {
+    if (!resizingId) return;
+    let lastX = 0;
+    const onMove = (e: MouseEvent) => {
+      lastX = e.clientX;
+    };
+    const finish = () => {
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: lastX, clientY: 0 }));
+    };
+    const onOut = (e: MouseEvent) => {
+      if (!e.relatedTarget) finish();
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('blur', finish);
+    document.addEventListener('mouseout', onOut);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('blur', finish);
+      document.removeEventListener('mouseout', onOut);
+    };
+  }, [resizingId]);
+
   return (
     // The wrapper is the scroll box (both axes) — h-full inside the app's
     // flex column. overflow-x-auto alone would make the sticky header inert.
@@ -555,7 +570,8 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
           border-separate (not collapse) keeps the sticky header's border
           pinned to the header row while rows scroll under it. */}
       <table
-        className="table-fixed border-separate border-spacing-0 text-sm tabular-nums"
+        // text-[12px] = v1's table font size (frozen contract).
+        className="table-fixed border-separate border-spacing-0 text-[12px] tabular-nums"
         style={{ width: table.getTotalSize() }}
       >
         <thead>

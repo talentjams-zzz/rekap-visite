@@ -42,6 +42,41 @@ test('every column header has a resize grip and dragging resizes the column', as
   await expect(indicator).toHaveCount(0);
 });
 
+test('drag released outside the window still finishes (no stray click needed)', async ({
+  server,
+  page,
+}) => {
+  const { base, dir } = server;
+  const f = buildRegistryFile(dir, 'nusin', '26-08-26', [
+    { mr: '520002', nama: 'RESIZE2', tglReg: '2026-08-26 08:00:00' },
+  ]);
+  await page.goto(base, { waitUntil: 'load' });
+  await uploadFiles(page, [f]);
+  await waitRows(base, 'active', (r) => r.length === 1);
+
+  const th = page.locator('thead th').first();
+  const before = (await th.boundingBox())!;
+  const grip = page.locator('thead span[title="Drag to resize"]').first();
+  const box = (await grip.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 4 });
+
+  // Simulate the cursor leaving the window (taskbar / second monitor):
+  // mouseout with relatedTarget=null, and NO mouseup delivered.
+  await page.evaluate(() => {
+    document.dispatchEvent(
+      new MouseEvent('mouseout', { bubbles: true, relatedTarget: null }),
+    );
+  });
+  await page.waitForTimeout(150);
+
+  // The drag must have ended by itself at the last cursor position.
+  const after = (await th.boundingBox())!;
+  expect(after.width).toBeGreaterThan(before.width + 40);
+  expect(await page.locator('div.pointer-events-none.absolute.inset-y-0').count()).toBe(0);
+});
+
 test('header row stays pinned at the top when the table scrolls', async ({
   server,
   page,

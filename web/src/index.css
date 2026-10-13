@@ -6,6 +6,12 @@ html {
   text-rendering: optimizeLegibility;
 }
 
+/* V1's type (frozen contract): Segoe UI, 13px base. */
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
 ::selection {
   background: #99f6e4;
   color: #134e4a;

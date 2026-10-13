@@ -214,8 +214,8 @@ export default function App() {
         })
       : active.filter((r) => r.facility === tab && (!asoFilter || asoDueCount(r) > 0));
 
-  // v1 updateAsoAlertBanner: meds due to stop across ALL active patients.
-  const asoTotal = useMemo(() => active.reduce((n, r) => n + asoDueCount(r), 0), [active]);
+  // ASO warning lives on the per-facility filter button (no top banner).
+  const asoCount = active.filter((r) => r.facility === tab && asoDueCount(r) > 0).length;
   const title =
     tab === 'archived' ? 'Archived' : tab === 'rekap' ? 'Rekap Checklist' : tab.charAt(0).toUpperCase() + tab.slice(1);
 
@@ -245,11 +245,6 @@ export default function App() {
           {busyCleanup ? 'Running…' : '🧹 Monthly Cleanup'}
         </button>
       </header>
-      {asoTotal > 0 && (
-        <div className="flex shrink-0 items-center gap-2 bg-red-600 px-4 py-1.5 text-sm font-bold text-white">
-          ⚠️ ASO Alert : {asoTotal} {asoTotal === 1 ? 'med' : 'meds'}
-        </div>
-      )}
       <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col gap-3 p-4">
         <div className="shrink-0">
           <TabBar tab={tab} onChange={setTab} counts={counts} />
@@ -272,14 +267,16 @@ export default function App() {
               {tab !== 'archived' && (
                 <div className="mb-2 flex shrink-0 items-center gap-2">
                   <button
-                    className={`rounded border px-2 py-0.5 text-xs ${
-                      asoFilter
-                        ? 'border-red-600 bg-red-600 text-white'
-                        : 'border-zinc-300 bg-white hover:bg-zinc-50'
+                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors ${
+                      asoCount > 0
+                        ? asoFilter
+                          ? 'bg-red-700 text-white ring-2 ring-red-300'
+                          : 'bg-red-600 text-white hover:bg-red-700'
+                        : 'border border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
                     }`}
                     onClick={() => setAsoFilter(!asoFilter)}
                   >
-                    ASO ⚠ ({active.filter((r) => r.facility === tab && asoDueCount(r) > 0).length})
+                    ASO ⚠ ({asoCount})
                   </button>
                 </div>
               )}

@@ -1,5 +1,6 @@
 // Ports v1 test_aso.py + test_aso_alert.py:
-// meds-to-stop list, due highlighting, top alert banner, confirm-stopped.
+// meds-to-stop list, due highlighting, ASO filter-button warning, confirm-stopped.
+// (The v1 top banner was moved onto the ASO filter button by request.)
 import { test, expect } from '../helpers/fixture.js';
 import { buildRegistryFile } from '../helpers/xlsx.js';
 import { waitRows, rowFor, uploadFiles } from '../helpers/ui.js';
@@ -15,24 +16,27 @@ test('aso: add due med → banner; confirm stopped → banner clears', async ({ 
   await uploadFiles(page, [reg]);
   await waitRows(base, 'active', (r) => r.some((x) => x.mr === MR));
 
-  // No banner while there are no due meds.
-  expect(await page.locator('text=ASO Alert').count()).toBe(0);
+  // No warning while there are no due meds (neutral button, count 0).
+  const asoBtn = page.locator('button', { hasText: /^ASO ⚠/ });
+  expect(await asoBtn.innerText()).toContain('(0)');
+  expect((await asoBtn.getAttribute('class')) ?? '').not.toContain('bg-red');
 
   const row = rowFor(page, MR);
   await row.locator('button', { hasText: '+ Add med' }).click();
   await row.locator("input[placeholder='Med name']").fill('ketorolac');
   await row.locator("input[type='date']").fill('2026-10-01'); // in the past → due
 
-  // Due badge in the cell + top banner with count 1.
+  // Due badge in the cell + the filter button turns red with count 1.
   await page.waitForSelector(`tr >> text=⚠ 1 due to stop`);
-  const banner = page.locator('div', { hasText: 'ASO Alert' }).first();
-  expect((await banner.innerText()).includes('1 med')).toBeTruthy();
+  await expect(asoBtn).toHaveText(/ASO ⚠ \(1\)/);
+  expect((await asoBtn.getAttribute('class')) ?? '').toContain('bg-red-600');
 
-  // Confirm stopped → due badge + banner disappear.
+  // Confirm stopped → due badge + red warning disappear.
   await row.locator('button', { hasText: '✓' }).click();
   await page.waitForTimeout(600);
   expect(await row.locator('text=due to stop').count()).toBe(0);
-  expect(await page.locator('text=ASO Alert').count()).toBe(0);
+  await expect(asoBtn).toHaveText(/ASO ⚠ \(0\)/);
+  expect((await asoBtn.getAttribute('class')) ?? '').not.toContain('bg-red');
 
   // Remove the med entirely.
   await row.locator('button[title="Remove"]').click();
@@ -51,10 +55,12 @@ test('aso: future stopDate is not due; removed med decrements banner', async ({ 
   await page.locator('nav button', { hasText: 'Melati' }).click();
 
   const row = rowFor(page, MR);
+  const asoBtn = page.locator('button', { hasText: /^ASO ⚠/ });
   await row.locator('button', { hasText: '+ Add med' }).click();
   await row.locator("input[placeholder='Med name']").fill('ceftriaxon');
   await row.locator("input[type='date']").fill('2027-01-01'); // future → not due
-  expect(await page.locator('text=ASO Alert').count()).toBe(0);
+  await expect(asoBtn).toHaveText(/ASO ⚠ \(0\)/);
+  expect((await asoBtn.getAttribute('class')) ?? '').not.toContain('bg-red');
   expect(await row.locator('text=due to stop').count()).toBe(0);
 
   await row.locator('button[title="Remove"]').click();
