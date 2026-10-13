@@ -39,9 +39,12 @@ test('riwayat keeps one snapshot per day; manual diagnosis edit lands in current
   // Badge shows 1 past day; expanding lists it with the edited diagnosis.
   const badge = page.locator('table tbody button', { hasText: 'Riwayat (1)' }).first();
   await badge.click();
-  await page.waitForSelector('text=Riwayat (past days)');
-  const histTable = page.locator('table table tbody tr').first();
-  expect(await histTable.innerText()).toContain('TEST DX P8');
+  // Past days are REAL rows in the main table, marked by the Riwayat chip.
+  const histRow = page.locator('table tbody tr', {
+    has: page.locator('span', { hasText: /^Riwayat$/ }),
+  });
+  await histRow.first().waitFor();
+  expect(await histRow.first().innerText()).toContain('TEST DX P8');
 
   // API agrees.
   const hist = await apiHistory(base, row.id);

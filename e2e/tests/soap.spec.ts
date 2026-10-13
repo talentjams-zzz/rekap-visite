@@ -40,7 +40,9 @@ test('SOAP: free text, cleared on the next day, previous day moves to Riwayat', 
 
   // …and the previous day's SOAP is in Riwayat.
   await page.locator('table tbody button', { hasText: 'Riwayat (1)' }).first().click();
-  await page.waitForSelector('text=Riwayat (past days)');
-  const histRow = page.locator('table table tbody tr').first();
-  expect(await histRow.innerText()).toContain(SOAP_TEXT);
+  const histRow = page.locator('table tbody tr', {
+    has: page.locator('span', { hasText: /^Riwayat$/ }),
+  });
+  await histRow.first().waitFor();
+  expect(await histRow.first().innerText()).toContain(SOAP_TEXT);
 });

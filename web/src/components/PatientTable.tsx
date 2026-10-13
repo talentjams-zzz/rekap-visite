@@ -67,21 +67,7 @@ function ChecklistCell({ row, onToggleCheck }: { row: RowDto; onToggleCheck: Han
   );
 }
 
-const HISTORY_COLS: [keyof HistoryEntry, string][] = [
-  ['date', 'Tgl'],
-  ['tglRegistrasi', 'Tgl Reg'],
-  ['nama', 'Nama'],
-  ['umur', 'Umur'],
-  ['kamar', 'Kamar'],
-  ['bed', 'Bed'],
-  ['dokter', 'Dokter'],
-  ['diagnosis', 'Diagnosis'],
-  ['operan', 'Operan'],
-  ['terapi', 'Terapi'],
-  ['soap', 'SOAP'],
-];
-
-/** Riwayat badge: expands an inline table of PAST days (fetched on demand). */
+/** Riwayat badge: expands PAST days as rows in the SAME columns as today. */
 function RiwayatBadge({
   row,
   open,
@@ -103,31 +89,52 @@ function RiwayatBadge({
   );
 }
 
-/** Inline riwayat table: one row per PAST day (newest first). */
-function RiwayatTable({ days }: { days: HistoryEntry[] }) {
+/**
+ * Riwayat rows: one REAL <tr> per PAST day (newest first), in the SAME
+ * columns as the main table. With table-fixed each cell lands in its column,
+ * so past days line up exactly under today's data and follow every column
+ * resize (a separate nested table could not do that).
+ */
+function RiwayatRows({
+  days,
+  base,
+  showFacility,
+}: {
+  days: HistoryEntry[];
+  base: RowDto;
+  showFacility: boolean;
+}) {
+  const cell = 'overflow-hidden whitespace-pre-wrap p-2 align-top text-zinc-600';
   return (
-    <table className="mt-1 w-full border-collapse text-xs">
-      <thead>
-        <tr className="bg-zinc-100 text-left text-[10px] uppercase text-zinc-500">
-          {HISTORY_COLS.map(([k, label]) => (
-            <th key={k} className="p-1">
-              {label}
-            </th>
-          ))}
+    <>
+      {days.map((d) => (
+        <tr key={d.date} className="border-b border-teal-100 bg-teal-50/60">
+          <td className={cell}>{d.tglRegistrasi ?? ''}</td>
+          <td className={cell}>
+            <span className="mr-1 rounded bg-teal-100 px-1 text-[10px] uppercase text-teal-700">
+              Riwayat
+            </span>
+            {d.date}
+          </td>
+          <td className={cell}>{base.mr}</td>
+          {showFacility && <td className={cell}>{base.facility}</td>}
+          <td className={cell}>{d.nama ?? ''}</td>
+          <td className={cell}>{d.umur ?? ''}</td>
+          <td className={cell}>{d.kamar ?? ''}</td>
+          <td className={cell}>{d.bed ?? ''}</td>
+          <td className={cell}>{d.dokter ?? ''}</td>
+          <td className={cell}>{d.diagnosis ?? ''}</td>
+          <td className={cell}>{d.operan ?? ''}</td>
+          <td className={cell}>{d.terapi ?? ''}</td>
+          <td className={cell} />
+          <td className={cell} />
+          <td className={cell} />
+          <td className={cell} />
+          <td className={cell}>{d.soap ?? ''}</td>
+          <td className={cell} />
         </tr>
-      </thead>
-      <tbody>
-        {days.map((d) => (
-          <tr key={d.date} className="border-t border-zinc-100">
-            {HISTORY_COLS.map(([k]) => (
-              <td key={k} className="p-1 whitespace-pre-wrap">
-                {d[k] ?? ''}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+      ))}
+    </>
   );
 }
 
@@ -438,18 +445,16 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
                   </td>
                 ))}
               </tr>
-              {expanded?.id === row.original.id && (
-                <tr className="bg-teal-50/30">
-                  <td colSpan={columns.length} className="p-2">
-                    <div className="text-[10px] uppercase text-zinc-400">Riwayat (past days)</div>
-                    {expanded.days ? (
-                      <RiwayatTable days={expanded.days} />
-                    ) : (
-                      <div className="text-xs text-zinc-400">Loading…</div>
-                    )}
-                  </td>
-                </tr>
-              )}
+              {expanded?.id === row.original.id &&
+                (expanded.days ? (
+                  <RiwayatRows days={expanded.days} base={row.original} showFacility={showFacility} />
+                ) : (
+                  <tr className="bg-teal-50/30">
+                    <td colSpan={columns.length} className="p-2 text-xs text-zinc-400">
+                      Loading riwayat…
+                    </td>
+                  </tr>
+                ))}
               {labOpen?.mr === row.original.mr && row.original.lab && (
                 <tr className="bg-slate-50">
                   <td colSpan={columns.length} className="p-2">
