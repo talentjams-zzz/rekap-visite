@@ -33,12 +33,26 @@ export function registerUploads(
 
     const parsed: ParsedFile[] = [];
     const skipped: string[] = [];
+    // Dedupe key = filename + content hash. Same name + same bytes → the
+    // exact same report re-uploaded (skip: re-merging would bump the
+    // upload-time inputTs). Same bytes under a DIFFERENT day's filename is
+    // a legitimate new report (e.g. identical patient list on day N+1).
+    const seen = db
+      .prepare("SELECT filename || ':' || sha256 AS k FROM uploads")
+      .all() as { k: string }[];
+    const known = new Set(seen.map((r) => r.k));
     for (const f of files) {
       const facility = detectFacility(f.filename);
       if (!facility) {
         skipped.push(`${f.filename} (unknown facility)`);
         continue;
       }
+      const dupKey = `${f.filename}:${createHash('sha256').update(f.buffer).digest('hex')}`;
+      if (known.has(dupKey)) {
+        skipped.push(`${f.filename} (duplicate — already uploaded)`);
+        continue;
+      }
+      known.add(dupKey);
       try {
         const wb = XLSX.read(f.buffer, { type: 'buffer' });
         const sheets = wb.SheetNames.map((n) => ({
@@ -62,8 +76,18 @@ export function registerUploads(
     }
 
     if (!parsed.length) {
-      reply.code(400);
-      return { ok: false, error: 'no usable files', skipped };
+      // Every file was skipped (duplicate / unknown facility / unparseable).
+      // Report success with the skip reasons (v1 showed them in the same
+      // toast) and do NOT re-run the archive sync on an empty batch.
+      return {
+        ok: true,
+        files: 0,
+        added: 0,
+        merged: 0,
+        skipped,
+        warnings: [],
+        sync: { archived: 0, unarchived: 0 },
+      };
     }
 
     const state = loadWorldState(db);

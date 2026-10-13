@@ -40,6 +40,7 @@ export function newPatientRow(
     checklist: { telaah_resep: null, catatan_pengobatan: null, pio: null },
     pharmacistNote: '',
     aso: [],
+    rev: 0,
     archived: false,
     archivedAt: null,
     telaahLog: [],

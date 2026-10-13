@@ -14,6 +14,8 @@ export interface RowDto {
   operan: string | null;
   terapi: string | null;
   pharmacistNote: string | null;
+  /** Optimistic-concurrency revision — echo it back on row writes. */
+  rev: number;
   aso: AsoMed[];
   lab: {
     loadedAt: string | null;

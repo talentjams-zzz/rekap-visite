@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS patients (
   terapi           TEXT,
   pharmacist_note  TEXT,
   aso_json         TEXT NOT NULL DEFAULT '[]',  -- [{id,name,stopDate,stopped,stoppedAt}] (v1 row.aso)
+  rev              INTEGER NOT NULL DEFAULT 0,  -- optimistic-concurrency revision (bumped on every row write)
   archived         INTEGER NOT NULL DEFAULT 0,
   archived_at      TEXT,
   last_seen        TEXT,
@@ -80,6 +81,19 @@ CREATE TABLE IF NOT EXISTS labs (
 CREATE TABLE IF NOT EXISTS facility_latest_input (
   facility    TEXT PRIMARY KEY,
   input_ts    TEXT
+);
+
+-- Monthly maintenance runs (v1 lastMaintenance field)
+CREATE TABLE IF NOT EXISTS maintenance_log (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  ran_at         TEXT NOT NULL,   -- "YYYY-MM-DD HH:MM:SS"
+  trigger        TEXT NOT NULL,   -- manual | scheduled
+  backup_file    TEXT NOT NULL,
+  rows_before    INTEGER NOT NULL,
+  rows_after     INTEGER NOT NULL,
+  removed_rows   INTEGER NOT NULL,
+  removed_checklist INTEGER NOT NULL,
+  removed_lab    INTEGER NOT NULL
 );
 
 -- Every accepted Excel upload (audit + idempotency)

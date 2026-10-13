@@ -38,6 +38,17 @@ function nowTs(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
+// Optimistic concurrency: the client echoes the row rev it loaded. A
+// mismatch means another device changed the row first → 409 (client reloads).
+const REV_SELECT = 'SELECT rev FROM patients WHERE id = ?';
+const REV_BUMP = 'UPDATE patients SET rev = rev + 1 WHERE id = ?';
+function checkRev(db: DatabaseSync, id: string, bodyRev: unknown): 'missing' | 'conflict' | 'ok' {
+  const row = db.prepare(REV_SELECT).get(id) as { rev: number } | undefined;
+  if (!row) return 'missing';
+  if (typeof bodyRev === 'number' && bodyRev !== row.rev) return 'conflict';
+  return 'ok';
+}
+
 export function registerInteractions(
   app: FastifyInstance,
   db: DatabaseSync,
@@ -47,7 +58,16 @@ export function registerInteractions(
   // Replace a row's ASO (meds-to-stop) list.
   app.patch('/api/rows/:id/aso', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = (req.body ?? {}) as { aso?: unknown };
+    const body = (req.body ?? {}) as { aso?: unknown; rev?: number };
+    const rev = checkRev(db, id, body.rev);
+    if (rev === 'missing') {
+      reply.code(404);
+      return { ok: false, error: 'row not found' };
+    }
+    if (rev === 'conflict') {
+      reply.code(409);
+      return { ok: false, error: 'conflict' };
+    }
     if (!Array.isArray(body.aso)) {
       reply.code(400);
       return { ok: false, error: 'aso must be an array' };
@@ -67,26 +87,37 @@ export function registerInteractions(
       reply.code(404);
       return { ok: false, error: 'row not found' };
     }
-    return { ok: true };
+    db.prepare(REV_BUMP).run(id);
+    // Return the new rev so the client can refresh its local copy —
+    // back-to-back writes from the same device then never 409.
+    const newRev = Number((db.prepare(REV_SELECT).get(id) as { rev: number }).rev);
+    return { ok: true, rev: newRev };
   });
 
   app.post('/api/rows/:id/check', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { key, value } = req.body as { key?: string; value?: string | null };
+    const { key, value, rev } = req.body as { key?: string; value?: string | null; rev?: number };
     if (!key || !ROW_ITEM_KEYS.includes(key)) {
       reply.code(400);
       return { ok: false, error: 'invalid row checklist item' };
     }
-    if (!db.prepare('SELECT id FROM patients WHERE id = ?').get(id)) {
+    const r = checkRev(db, id, rev);
+    if (r === 'missing') {
       reply.code(404);
       return { ok: false, error: 'row not found' };
+    }
+    if (r === 'conflict') {
+      reply.code(409);
+      return { ok: false, error: 'conflict' };
     }
     db.prepare(
       'INSERT INTO row_checklist (patient_id, item_key, checked_at) VALUES (?,?,?) ' +
         'ON CONFLICT(patient_id, item_key) DO UPDATE SET checked_at = excluded.checked_at',
     ).run(id, key, value ?? null);
+    db.prepare(REV_BUMP).run(id);
+    const newRev = Number((db.prepare(REV_SELECT).get(id) as { rev: number }).rev);
     broadcast();
-    return { ok: true };
+    return { ok: true, rev: newRev };
   });
 
   // Patient-level checklist (5 lifetime items, keyed by MR).
@@ -116,6 +147,7 @@ export function registerInteractions(
       diagnosis?: string;
       operan?: string;
       terapi?: string;
+      rev?: number;
     };
     const row = db
       .prepare('SELECT id, date_added FROM patients WHERE id = ?')
@@ -123,6 +155,11 @@ export function registerInteractions(
     if (!row) {
       reply.code(404);
       return { ok: false, error: 'row not found' };
+    }
+    const rev = checkRev(db, id, body.rev);
+    if (rev === 'conflict') {
+      reply.code(409);
+      return { ok: false, error: 'conflict' };
     }
 
     if (typeof body.note === 'string') {
@@ -151,8 +188,10 @@ export function registerInteractions(
         }
       }
     }
+    db.prepare(REV_BUMP).run(id);
+    const newRev = Number((db.prepare(REV_SELECT).get(id) as { rev: number }).rev);
     broadcast();
-    return { ok: true };
+    return { ok: true, rev: newRev };
   });
 
   // Riwayat: PAST days only (the current day is shown in the main row).

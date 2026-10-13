@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchRows, patchAso, patchRow, postPatientCheck, postRowCheck } from './api';
+import {
+  ConflictError,
+  fetchRows,
+  patchAso,
+  patchRow,
+  postPatientCheck,
+  postRowCheck,
+  runMaintenance,
+  type RowWriteResult,
+} from './api';
 import { PatientTable } from './components/PatientTable';
 import { Rekap } from './components/Rekap';
 import { TabBar } from './components/TabBar';
@@ -80,11 +89,21 @@ export default function App() {
             : r,
         ),
       );
-      const call = isRowItem
-        ? postRowCheck(row.id, key, value)
-        : postPatientCheck(row.mr, key, value);
-      call.catch((e: Error) => {
-        notify(`Check failed: ${e.message}`, true);
+      const call: Promise<RowWriteResult | undefined> = isRowItem
+        ? postRowCheck(row.id, key, value, row.rev)
+        : postPatientCheck(row.mr, key, value).then(() => undefined);
+      call.then((res) => {
+        // Refresh the local rev so back-to-back writes don't 409.
+        if (isRowItem && res && typeof res.rev === 'number') {
+          const nr = res.rev;
+          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
+        }
+      }).catch((e: Error) => {
+        if (e instanceof ConflictError) {
+          notify('Row changed on another device — reloading', true);
+        } else {
+          notify(`Check failed: ${e.message}`, true);
+        }
         reload();
       });
     },
@@ -95,8 +114,17 @@ export default function App() {
     (row: RowDto, key: EditableKey, value: string) => {
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, [key]: value } : r)));
       const patch = key === 'pharmacistNote' ? { note: value } : { [key]: value };
-      patchRow(row.id, patch).catch((e: Error) => {
-        notify(`Save failed: ${e.message}`, true);
+      patchRow(row.id, { ...patch, rev: row.rev }).then((res) => {
+        if (typeof res.rev === 'number') {
+          const nr = res.rev;
+          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
+        }
+      }).catch((e: Error) => {
+        if (e instanceof ConflictError) {
+          notify('Row changed on another device — reloading', true);
+        } else {
+          notify(`Save failed: ${e.message}`, true);
+        }
         reload();
       });
     },
@@ -107,10 +135,18 @@ export default function App() {
     (row: RowDto) => {
       const archived = !row.archived;
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, archived } : r)));
-      patchRow(row.id, { archived }).then(() => {
+      patchRow(row.id, { archived, rev: row.rev }).then((res) => {
         notify(`${row.nama || row.mr} ${archived ? 'archived' : 'returned to active'}`);
+        if (typeof res.rev === 'number') {
+          const nr = res.rev;
+          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
+        }
       }).catch((e: Error) => {
-        notify(`Archive failed: ${e.message}`, true);
+        if (e instanceof ConflictError) {
+          notify('Row changed on another device — reloading', true);
+        } else {
+          notify(`Archive failed: ${e.message}`, true);
+        }
         reload();
       });
     },
@@ -120,13 +156,44 @@ export default function App() {
   const handleAsoChange = useCallback(
     (row: RowDto, aso: AsoMed[]) => {
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, aso } : r)));
-      patchAso(row.id, aso).catch((e: Error) => {
-        notify(`ASO save failed: ${e.message}`, true);
+      patchAso(row.id, aso, row.rev).then((res) => {
+        if (typeof res.rev === 'number') {
+          const nr = res.rev;
+          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
+        }
+      }).catch((e: Error) => {
+        if (e instanceof ConflictError) {
+          notify('Row changed on another device — reloading', true);
+        } else {
+          notify(`ASO save failed: ${e.message}`, true);
+        }
         reload();
       });
     },
     [notify, reload, updateLocal],
   );
+
+  // v1 🧹 Monthly Cleanup: back up ALL data, then remove archived patients.
+  const [busyCleanup, setBusyCleanup] = useState(false);
+  const handleMaintenance = async () => {
+    const n = archived.length;
+    const ok = window.confirm(
+      `Monthly cleanup:\n1. Back up ALL data (active + archived) to a timestamped file\n` +
+        `2. Remove ${n} archived patient(s) and their leftover checklist/lab data\n\n` +
+        `Active patients are kept. The backup is verified before anything is removed.\n\nContinue?`,
+    );
+    if (!ok) return;
+    setBusyCleanup(true);
+    try {
+      const j = await runMaintenance();
+      notify(`Cleanup done: ${j.lastMaintenance?.removedRows ?? 0} archived removed · backup ${j.lastMaintenance?.backupFile ?? ''}`);
+      reload();
+    } catch (e) {
+      notify(`Cleanup failed: ${(e as Error).message}`, true);
+    } finally {
+      setBusyCleanup(false);
+    }
+  };
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { archived: archived.length };
@@ -154,10 +221,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-100 text-zinc-900">
-      <header className="border-b border-zinc-200 bg-white px-4 py-2">
+      <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-2">
         <h1 className="text-lg font-semibold">
           Rekap Visite <span className="text-xs font-normal text-zinc-400">v2</span>
         </h1>
+        <button
+          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
+          disabled={busyCleanup}
+          onClick={handleMaintenance}
+          title="Monthly job: back up ALL data, then remove archived patients. Runs automatically on the 1st of each month — this runs it now."
+        >
+          {busyCleanup ? 'Running…' : '🧹 Monthly Cleanup'}
+        </button>
       </header>
       {asoTotal > 0 && (
         <div className="flex items-center gap-2 bg-red-600 px-4 py-1.5 text-sm font-bold text-white">

@@ -6,13 +6,37 @@ export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]
   return (await r.json()) as RowDto[];
 }
 
-export async function postRowCheck(id: string, key: string, value: string | null): Promise<void> {
+/** Thrown on HTTP 409 — the row changed on another device; caller reloads. */
+export class ConflictError extends Error {
+  constructor() {
+    super('conflict');
+  }
+}
+
+async function throwIfNotOk(r: Response): Promise<void> {
+  if (r.status === 409) throw new ConflictError();
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Result of a successful row write — `rev` is the new row revision. */
+export interface RowWriteResult {
+  ok: boolean;
+  rev?: number;
+}
+
+export async function postRowCheck(
+  id: string,
+  key: string,
+  value: string | null,
+  rev?: number,
+): Promise<RowWriteResult> {
   const r = await fetch(`/api/rows/${encodeURIComponent(id)}/check`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value }),
+    body: JSON.stringify({ key, value, rev }),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  await throwIfNotOk(r);
+  return (await r.json()) as RowWriteResult;
 }
 
 export async function postPatientCheck(mr: string, key: string, value: string | null): Promise<void> {
@@ -30,15 +54,17 @@ export interface RowPatch {
   diagnosis?: string;
   operan?: string;
   terapi?: string;
+  rev?: number;
 }
 
-export async function patchRow(id: string, patch: RowPatch): Promise<void> {
+export async function patchRow(id: string, patch: RowPatch): Promise<RowWriteResult> {
   const r = await fetch(`/api/rows/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  await throwIfNotOk(r);
+  return (await r.json()) as RowWriteResult;
 }
 
 /** Riwayat: past days only (newest first). */
@@ -57,13 +83,52 @@ export async function fetchLab(mr: string): Promise<LabReport | null> {
 }
 
 /** Replace a row's ASO (meds-to-stop) list. */
-export async function patchAso(id: string, aso: AsoMed[]): Promise<void> {
+export async function patchAso(
+  id: string,
+  aso: AsoMed[],
+  rev?: number,
+): Promise<RowWriteResult> {
   const r = await fetch(`/api/rows/${encodeURIComponent(id)}/aso`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ aso }),
+    body: JSON.stringify({ aso, rev }),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  await throwIfNotOk(r);
+  return (await r.json()) as RowWriteResult;
+}
+
+/** Run the monthly maintenance job now (backup → verify → remove archived). */
+export async function runMaintenance(): Promise<{
+  ok: boolean;
+  error?: string;
+  lastMaintenance?: {
+    ranAt: string;
+    trigger: string;
+    backupFile: string;
+    rowsBefore: number;
+    rowsAfter: number;
+    removedRows: number;
+    removedChecklist: number;
+    removedLab: number;
+  };
+}> {
+  const r = await fetch('/api/maintenance/run', { method: 'POST' });
+  const j = (await r.json()) as {
+    ok: boolean;
+    error?: string;
+    lastMaintenance?: {
+      ranAt: string;
+      trigger: string;
+      backupFile: string;
+      rowsBefore: number;
+      rowsAfter: number;
+      removedRows: number;
+      removedChecklist: number;
+      removedLab: number;
+    };
+  };
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
 }
 
 /** Rekap checklist aggregates (v1 buildRekapData). */

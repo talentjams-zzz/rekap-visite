@@ -17,5 +17,8 @@ export function openDb(file: string): DatabaseSync {
   if (!cols.some((c) => c.name === 'aso_json')) {
     db.exec("ALTER TABLE patients ADD COLUMN aso_json TEXT NOT NULL DEFAULT '[]'");
   }
+  if (!cols.some((c) => c.name === 'rev')) {
+    db.exec('ALTER TABLE patients ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
+  }
   return db;
 }

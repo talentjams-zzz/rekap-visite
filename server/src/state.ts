@@ -81,6 +81,7 @@ export function loadWorldState(db: DatabaseSync): WorldState {
       },
       pharmacistNote: (r.pharmacist_note as string) ?? '',
       aso: parseAsoJson(r.aso_json),
+      rev: Number(r.rev ?? 0),
       archived: Number(r.archived) === 1,
       archivedAt: (r.archived_at as string) ?? null,
       telaahLog: rl['telaah_resep'] ?? [],
@@ -114,8 +115,8 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
   try {
     const insP = db.prepare(`
       INSERT INTO patients (id, mr, facility, date_added, tgl_registrasi, nama, umur, kamar, bed,
-                            dokter, diagnosis, operan, terapi, pharmacist_note, aso_json, archived, archived_at, last_seen)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            dokter, diagnosis, operan, terapi, pharmacist_note, aso_json, rev, archived, archived_at, last_seen)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         date_added = excluded.date_added,
         tgl_registrasi = excluded.tgl_registrasi,
@@ -132,11 +133,13 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
         archived_at = excluded.archived_at,
         last_seen = excluded.last_seen`);
     for (const r of state.rows) {
+      // rev is insert-only: a write-back must never roll back a rev that a
+      // concurrent interaction already bumped in the DB (ON CONFLICT keeps it).
       insP.run(
         r.id, r.mr, r.facility, r.dateAdded || null, r.tglRegistrasi || null,
         r.nama || null, r.umur || null, r.kamar || null, r.bed || null,
         r.dokter || null, r.diagnosis || null, r.operan || null, r.terapi || null,
-        r.pharmacistNote || null, JSON.stringify(r.aso ?? []), r.archived ? 1 : 0, r.archivedAt, r.lastSeen,
+        r.pharmacistNote || null, JSON.stringify(r.aso ?? []), r.rev ?? 0, r.archived ? 1 : 0, r.archivedAt, r.lastSeen,
       );
     }
 

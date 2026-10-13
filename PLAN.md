@@ -70,7 +70,7 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       registry upload 500'd, undetected because P6 verified lab uploads
       only); expanded lab panel went stale after SSE reload (now
       signature-checked auto-refresh).
-- [ ] **P9 — Hardening**: optimistic-concurrency 409 handling in client,
+- [x] **P9 — Hardening**: optimistic-concurrency 409 handling in client,
       error toasts, empty states, maintenance job (monthly backup + cleanup),
       upload dedupe by sha256.
 - [ ] **P10 — Deploy & cutover**: `pnpm build`, systemd unit (or pm2) on the

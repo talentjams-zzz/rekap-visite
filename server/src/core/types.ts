@@ -66,6 +66,7 @@ export interface PatientRow {
   checklist: Record<RowChecklistItem, string | null>;
   pharmacistNote: string;
   aso: AsoMed[];
+  rev: number; // optimistic-concurrency revision (DB-bumped on row writes)
   archived: boolean;
   archivedAt: string | null;
   telaahLog: LogEntry[];
