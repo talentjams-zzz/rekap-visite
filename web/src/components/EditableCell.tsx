@@ -20,7 +20,7 @@ export function EditableCell({ value, onSave, className = '' }: Props) {
     return (
       <textarea
         autoFocus
-        className="min-h-[56px] w-full rounded border border-teal-400 p-1 text-xs"
+        className="min-h-[56px] w-full rounded border border-(--primary) p-1 text-xs"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
@@ -41,13 +41,13 @@ export function EditableCell({ value, onSave, className = '' }: Props) {
   }
   return (
     <span
-      className={`cursor-text whitespace-pre-wrap border-b border-dotted border-zinc-300 hover:border-teal-500 ${className}`}
+      className={`cursor-text whitespace-pre-wrap border-b border-dotted border-(--border) hover:border-(--primary) ${className}`}
       onClick={() => {
         setDraft(value || '');
         setEditing(true);
       }}
     >
-      {value || <span className="text-zinc-300">+</span>}
+      {value || <span className="text-(--text2)">+</span>}
     </span>
   );
 }

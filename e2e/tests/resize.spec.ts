@@ -22,24 +22,21 @@ test('every column header has a resize grip and dragging resizes the column', as
   expect(await grips.count()).toBe(colCount);
   expect(colCount).toBeGreaterThan(5);
 
-  // Drag the first column's grip ~60px right. During the drag a live
-  // indicator line + width badge follow the cursor (the table reflows only
-  // once, on release — with 300+ rows a per-frame reflow is what stuttered).
+  // Drag the first column's grip ~60px right. V1-style: the column follows
+  // the cursor LIVE during the drag (direct DOM writes, no React re-render
+  // per frame) and the width sticks after release.
   const th = page.locator('thead th').first();
   const before = (await th.boundingBox())!;
-  const indicator = page.locator('div.pointer-events-none.absolute.inset-y-0');
   const grip = grips.first();
   const box = (await grip.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 4 });
-  await expect(indicator).toBeVisible();
-  const badge = await indicator.innerText();
-  expect(badge).toMatch(/\d+px/);
+  const mid = (await th.boundingBox())!;
+  expect(mid.width).toBeGreaterThan(before.width + 40);
   await page.mouse.up();
   const after = (await th.boundingBox())!;
   expect(after.width).toBeGreaterThan(before.width + 40);
-  await expect(indicator).toHaveCount(0);
 });
 
 test('drag released outside the window still finishes (no stray click needed)', async ({
@@ -74,7 +71,6 @@ test('drag released outside the window still finishes (no stray click needed)', 
   // The drag must have ended by itself at the last cursor position.
   const after = (await th.boundingBox())!;
   expect(after.width).toBeGreaterThan(before.width + 40);
-  expect(await page.locator('div.pointer-events-none.absolute.inset-y-0').count()).toBe(0);
 });
 
 test('header row stays pinned at the top when the table scrolls', async ({

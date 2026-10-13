@@ -85,7 +85,7 @@ export function UploadBar({ onUploaded, notify }: Props) {
       />
       <label
         htmlFor="file-input"
-        className="inline-block cursor-pointer rounded bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
+        className="inline-block cursor-pointer rounded bg-(--primary) px-3 py-1.5 text-sm font-medium text-white hover:bg-(--primary-hover)"
       >
         {busy ? 'Loading…' : '📄 Load Excel Files'}
       </label>
@@ -97,7 +97,7 @@ export function UploadBar({ onUploaded, notify }: Props) {
       >
         {labBusy ? 'Loading…' : '🧪 Load Lab Files'}
       </label>
-      <span className="ml-2 text-xs text-zinc-400">
+      <span className="ml-2 text-xs text-(--text2)">
         registry: nusin/melati/sakura/observasi DD-M-YY.xlsx · handover: operan nusin DD-M-YY.xlsx · lab: lab-{'{'}MR{'}'}.xlsx
       </span>
     </div>

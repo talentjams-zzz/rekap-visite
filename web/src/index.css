@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+/* V1 palette — literal port of the frozen app's :root variables.
+   The whole v2 UI colors off these. */
+:root {
+  --bg: #f5f5f5;
+  --card: #fff;
+  --border: #ddd;
+  --text: #222;
+  --text2: #555;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+  --success-hover: #15803d;
+  --archive-bg: #fef2f2;
+  --row-hover: #f0f7ff;
+  --check-done: #dcfce7;
+  --header: #1e293b;
+  --header-text: #fff;
+  --thead: #334155;
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

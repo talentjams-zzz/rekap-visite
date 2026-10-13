@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useMemo, useState } from 'react';
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createColumnHelper,
   flexRender,
@@ -33,23 +33,23 @@ interface Handlers {
   notify: (msg: string, error?: boolean) => void;
 }
 
-/** Tgl Reg cell: date on line 1, time on line 2 (v1 style). */
+/** Tgl Reg cell: date on line 1, time on line 2 (v1: 10px time in --text2). */
 function TglRegCell({ value }: { value: string | null }) {
-  if (!value) return <span className="text-slate-300">—</span>;
+  if (!value) return <span className="text-(--border)">—</span>;
   const sp = value.indexOf(' ');
   const [d, t] = sp > 0 ? [value.slice(0, sp), value.slice(sp + 1)] : [value, ''];
   return (
     <div className="leading-tight">
-      <div className="font-medium tabular-nums text-slate-700">{d}</div>
-      {t && <div className="text-xs tabular-nums text-slate-400">{t}</div>}
+      <div className="tabular-nums text-(--text)">{d}</div>
+      {t && <div className="text-[10px] tabular-nums text-(--text2)">{t}</div>}
     </div>
   );
 }
 
-/** Name cell: semibold name (avatar removed at the user's request). */
+/** Name cell: semibold name (v1 name-col; avatar removed at the user's request). */
 function NameCell({ value }: { value: string | null }) {
-  if (!value) return <span className="text-slate-300">—</span>;
-  return <span className="font-semibold text-slate-800">{value}</span>;
+  if (!value) return <span className="text-(--border)">—</span>;
+  return <span className="font-semibold text-(--text)">{value}</span>;
 }
 
 function ChecklistCell({ row, onToggleCheck }: { row: RowDto; onToggleCheck: Handlers['onToggleCheck'] }) {
@@ -62,8 +62,8 @@ function ChecklistCell({ row, onToggleCheck }: { row: RowDto; onToggleCheck: Han
             key={key}
             title={`${key}: ${ts ?? 'not done'} — click to ${ts ? 'clear' : 'check'}`}
             onClick={() => onToggleCheck(row, key)}
-            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors hover:ring-1 hover:ring-teal-400 ${
-              ts ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-400'
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors ${
+              ts ? 'bg-(--check-done) text-(--success)' : 'bg-[#eee] text-(--text2)'
             }`}
           >
             {label}
@@ -87,8 +87,9 @@ function RiwayatBadge({
   const n = row.dayCount - 1;
   if (n <= 0) return null;
   return (
+    // V1 .btn-history: blue border, #eef2ff fill, inverts on hover.
     <button
-      className="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 ring-1 ring-teal-200 transition-colors hover:bg-teal-100"
+      className="ml-1.5 whitespace-nowrap rounded border border-(--primary) bg-[#eef2ff] px-2 py-0.5 text-[10px] font-medium text-(--primary) transition-colors hover:bg-(--primary) hover:text-white"
       onClick={() => onToggle(row)}
     >
       {open ? '▲' : '▼'} Riwayat ({n})
@@ -111,18 +112,19 @@ function RiwayatRows({
   base: RowDto;
   showFacility: boolean;
 }) {
+  // V1 history rows: #f8fafc background, blue date accent.
   const cell =
-    'overflow-hidden whitespace-pre-wrap border-b border-teal-100/70 px-2.5 py-2 align-top text-slate-500';
+    'overflow-hidden whitespace-pre-wrap border-b border-[#e2e8f0] px-1.5 py-1.5 align-top text-(--text2)';
   return (
     <>
       {days.map((d) => (
-        <tr key={d.date} className="bg-teal-50/40">
-          <td className={`${cell} border-l-2 border-l-teal-300`}>{d.tglRegistrasi ?? ''}</td>
+        <tr key={d.date} className="bg-[#f8fafc]">
+          <td className={`${cell} border-l-2 border-l-(--primary)`}>{d.tglRegistrasi ?? ''}</td>
           <td className={cell}>
-            <span className="mr-1.5 rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-700">
+            <span className="mr-1.5 rounded bg-[#eef2ff] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--primary)">
               Riwayat
             </span>
-            <span className="tabular-nums">{d.date}</span>
+            <span className="tabular-nums font-bold text-(--primary)">{d.date}</span>
           </td>
           <td className={cell}>{base.mr}</td>
           {showFacility && <td className={cell}>{base.facility}</td>}
@@ -146,10 +148,16 @@ function RiwayatRows({
   );
 }
 
-function Header({ table }: { table: Table<RowDto> }) {
+function Header({
+  table,
+  onResizeStart,
+}: {
+  table: Table<RowDto>;
+  onResizeStart: (e: React.MouseEvent, colId: string) => void;
+}) {
   return (
     // The header row stays pinned to the top of the table's scroll box while
-    // the rows scroll under it (the user's "slider on top" request).
+    // the rows scroll under it. V1 header look: dark #334155, white 11px.
     <tr className="text-left">
       {table.getHeaderGroups().map((hg) =>
         hg.headers.map((header) => {
@@ -161,30 +169,31 @@ function Header({ table }: { table: Table<RowDto> }) {
           return (
             <th
               key={header.id}
-              className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 p-0 select-none"
+              // box-shadow (not border-b) for the header's bottom edge: with
+              // border-collapse the border would scroll away from the sticky
+              // th; the shadow is painted per element and sticks with it.
+              className="sticky top-0 z-10 border-r border-white/10 bg-(--thead) p-0 select-none shadow-[inset_0_-1px_0_#ddd] transition-colors hover:bg-[#475569]"
               style={{ width: header.getSize() }}
             >
-              <div className="flex items-center gap-1 p-0">
+              <div className="relative flex items-center gap-1 p-0">
                 <button
-                  className="flex-1 px-2.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:text-slate-800 disabled:cursor-default"
+                  className="flex-1 truncate px-1.5 py-2 text-left text-[11px] font-semibold text-white disabled:cursor-default"
                   disabled={!canSort}
                   onClick={header.column.getToggleSortingHandler()}
                 >
                   {flexRender(header.column.columnDef.header, header.getContext())}
                   {canSort && (
-                    <span className={`ml-1 ${dir ? 'text-teal-600' : 'text-slate-300'}`}>
+                    <span className={`ml-1 text-[10px] ${dir ? 'text-white' : 'text-white/50'}`}>
                       {dir === 'asc' ? '▲' : dir === 'desc' ? '▼' : '↕'}
                     </span>
                   )}
                 </button>
                 {header.column.getCanResize() && (
-                  // Wide, visible grip at the column's right edge — every column
-                  // is resizable; drag it to size freely (persisted per tab).
+                  // V1 grip: 6px at the column's right edge, white/35 on hover.
                   <span
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
+                    onMouseDown={(e) => onResizeStart(e, header.column.id)}
                     title="Drag to resize"
-                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-l border-slate-200 transition-colors hover:bg-teal-300/70"
+                    className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize hover:bg-white/35"
                   />
                 )}
               </div>
@@ -222,11 +231,12 @@ const BodyRow = memo(
   }) {
     return (
       <Fragment>
-        <tr className="transition-colors hover:bg-teal-50/70">
+        // V1: 6px cell padding, #ddd row separator, light-blue row hover.
+        <tr className="transition-colors hover:bg-(--row-hover)">
           {row.getVisibleCells().map((cell) => (
             <td
               key={cell.id}
-              className="overflow-hidden border-b border-slate-100 px-2.5 py-2 align-top text-slate-700"
+              className="overflow-hidden border-b border-(--border) px-1.5 py-1.5 align-top text-(--text)"
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
             </td>
@@ -236,19 +246,19 @@ const BodyRow = memo(
           (expanded.days ? (
             <RiwayatRows days={expanded.days} base={row.original} showFacility={showFacility} />
           ) : (
-            <tr className="bg-teal-50/30">
-              <td colSpan={colCount} className="p-2 text-xs text-zinc-400">
+            <tr className="bg-[#f8fafc]">
+              <td colSpan={colCount} className="p-2 text-xs text-(--text2)">
                 Loading riwayat…
               </td>
             </tr>
           ))}
         {labOpen?.mr === row.original.mr && row.original.lab && (
-          <tr className="bg-slate-50">
+          <tr className="bg-[#f8fafc]">
             <td colSpan={colCount} className="p-2">
               {labOpen.rep ? (
                 <LabPanel row={row.original} rep={labOpen.rep} notify={handlers.notify} />
               ) : (
-                <div className="text-xs text-zinc-400">Loading lab…</div>
+                <div className="text-xs text-(--text2)">Loading lab…</div>
               )}
             </td>
           </tr>
@@ -372,7 +382,12 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
           );
         },
       }),
-      col.accessor((r) => r.mr, { id: 'mr', header: 'MR', size: 90 }),
+      col.accessor((r) => r.mr, {
+        id: 'mr',
+        header: 'MR',
+        size: 90,
+        cell: (info) => <span className="font-semibold tabular-nums">{info.getValue()}</span>,
+      }),
       ...(showFacility
         ? [col.accessor((r) => r.facility, { id: 'facility', header: 'Facility', size: 90 })]
         : []),
@@ -393,6 +408,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         cell: (info) => (
           <EditableCell
             value={info.getValue()}
+            className="text-[11px]"
             onSave={(v) => handlers.onEditField(info.row.original, 'diagnosis', v)}
           />
         ),
@@ -404,6 +420,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         cell: (info) => (
           <EditableCell
             value={info.getValue()}
+            className="text-[11px]"
             onSave={(v) => handlers.onEditField(info.row.original, 'operan', v)}
           />
         ),
@@ -415,6 +432,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         cell: (info) => (
           <EditableCell
             value={info.getValue()}
+            className="text-[11px]"
             onSave={(v) => handlers.onEditField(info.row.original, 'terapi', v)}
           />
         ),
@@ -478,8 +496,13 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         cell: (info) => {
           const r = info.row.original;
           return (
+            // V1: archive = red outline on #fef2f2, unarchive = green on #f0fdf4.
             <button
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 shadow-sm transition-colors hover:bg-slate-100 hover:text-slate-800"
+              className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${
+                r.archived
+                  ? 'border-(--success) bg-[#f0fdf4] text-(--success) hover:bg-[#dcfce7]'
+                  : 'border-(--danger) bg-(--archive-bg) text-(--danger) hover:bg-[#fee2e2]'
+              }`}
               onClick={() => handlers.onToggleArchive(r)}
             >
               {r.archived ? '↩' : '🗄'}
@@ -499,83 +522,110 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
     onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    // Resizing state lives in columnSizing (persisted), but the DRAG itself
+    // is handled below with direct DOM writes — see startColResize.
     enableColumnResizing: true,
-    // 'onEnd' (default, explicit): the table reflows exactly ONCE, on
-    // release. Measured: with 'onChange' every drag frame reflows the whole
-    // table — ~60-90ms/frame on 300 rows, which reads as stutter. During
-    // the drag a live indicator line + width badge follow the cursor
-    // (Excel/Sheets style); the body rows are memoized so the drag itself
-    // costs ~1ms of React work.
   });
+  const tableRef = useRef<Table<RowDto> | null>(null);
+  tableRef.current = table;
 
-  // Live drag indicator (see the columnResizeMode note above).
-  const ci = table.getState().columnSizingInfo;
-  // In table-core 8.21.x, isResizingColumn IS the resizing column's id.
-  const resizingId = typeof ci?.isResizingColumn === 'string' ? ci.isResizingColumn : undefined;
-  const resizingCol = resizingId ? table.getColumn(resizingId) : undefined;
-  const indicatorX = resizingCol
-    ? resizingCol.getStart() + resizingCol.getSize() + (ci?.deltaOffset ?? 0)
-    : 0;
-  const indicatorW = resizingCol
-    ? Math.max(0, Math.round(resizingCol.getSize() + (ci?.deltaOffset ?? 0)))
-    : 0;
+  // ── Column resize — V1's approach, verbatim in spirit ─────────────────
+  // During the drag we write the new width straight to the <th> (and keep
+  // the table's total width in sync) with NO React state update and NO
+  // re-render per mousemove. That is exactly why V1's resize feels instant
+  // while V2's stuttered: every framework re-render per frame cost 15-90ms.
+  // React's columnSizing state is committed exactly once, on release.
+  const dragRef = useRef<{
+    colId: string;
+    th: HTMLElement;
+    tableEl: HTMLTableElement;
+    startX: number;
+    startWidth: number;
+    lastWidth: number;
+    onMove: (e: MouseEvent) => void;
+    onUp: () => void;
+  } | null>(null);
+  const [dragging, setDragging] = useState(false);
 
-  useEffect(() => {
-    if (!ci?.isResizingColumn) return;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    return () => {
-      document.body.style.cursor = '';
+  const startColResize = (e: React.MouseEvent, colId: string) => {
+    const th = (e.currentTarget as HTMLElement).closest('th');
+    const tableEl = th?.closest('table');
+    if (!th || !tableEl) return;
+    e.preventDefault();
+    const startWidth = (th as HTMLElement).offsetWidth;
+    const d = {
+      colId,
+      th: th as HTMLElement,
+      tableEl: tableEl as HTMLTableElement,
+      startX: e.clientX,
+      startWidth,
+      lastWidth: startWidth,
+      onMove: (_e: MouseEvent) => {},
+      onUp: () => {},
+    };
+    d.onMove = (ev: MouseEvent) => {
+      let w = d.startWidth + (ev.clientX - d.startX);
+      if (w < 40) w = 40; // V1's minimum column width
+      d.lastWidth = w;
+      d.th.style.width = `${w}px`;
+      let total = 0;
+      d.tableEl.querySelectorAll('thead th').forEach((c) => {
+        total += (c as HTMLElement).offsetWidth;
+      });
+      d.tableEl.style.width = `${total}px`;
+    };
+    d.onUp = () => {
+      document.removeEventListener('mousemove', d.onMove);
+      document.removeEventListener('mouseup', d.onUp);
       document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      tableRef.current?.setColumnSizing({ [d.colId]: d.lastWidth });
+      dragRef.current = null;
+      setDragging(false);
     };
-  }, [ci?.isResizingColumn]);
+    dragRef.current = d;
+    document.addEventListener('mousemove', d.onMove);
+    document.addEventListener('mouseup', d.onUp);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    setDragging(true);
+  };
 
-  // If the drag is released OUTSIDE the browser window (cursor over the
-  // taskbar or a second monitor), the mouseup never reaches document and
-  // TanStack's handler stays armed — the next click inside the window is
-  // what "finishes" the drag (users had to click outside the table on some
-  // columns). Safety net: when the cursor leaves the page or the window
-  // loses focus, dispatch a synthetic mouseup at the last cursor position;
-  // TanStack's own handler ends the drag there and disarms itself.
+  // Lost-mouseup safety net: if the drag is released OUTSIDE the browser
+  // window (taskbar / second monitor), the mouseup never reaches document.
+  // When the cursor leaves the page or the window blurs, commit the drag at
+  // the last width instead of leaving it armed for the next click.
   useEffect(() => {
-    if (!resizingId) return;
-    let lastX = 0;
-    const onMove = (e: MouseEvent) => {
-      lastX = e.clientX;
-    };
-    const finish = () => {
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: lastX, clientY: 0 }));
-    };
+    if (!dragging) return;
+    const finish = () => dragRef.current?.onUp();
     const onOut = (e: MouseEvent) => {
       if (!e.relatedTarget) finish();
     };
-    window.addEventListener('mousemove', onMove);
     window.addEventListener('blur', finish);
     document.addEventListener('mouseout', onOut);
     return () => {
-      window.removeEventListener('mousemove', onMove);
       window.removeEventListener('blur', finish);
       document.removeEventListener('mouseout', onOut);
     };
-  }, [resizingId]);
+  }, [dragging]);
 
   return (
     // The wrapper is the scroll box (both axes) — h-full inside the app's
     // flex column. overflow-x-auto alone would make the sticky header inert.
-    <div className="relative h-full overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="h-full overflow-auto border border-(--border) bg-white">
       {/* table-fixed: column widths are exactly what the user resizes them to
           (auto layout let long content push resized columns back out). No
           w-full: the table is exactly the sum of its (resizable) columns, so
           resizing is not squished back; the wrapper scrolls both axes.
-          border-separate (not collapse) keeps the sticky header's border
-          pinned to the header row while rows scroll under it. */}
+          border-collapse = V1's layout mode: measurably cheaper per-frame
+          reflow than border-separate on 300-row tables. */}
       <table
         // text-[12px] = v1's table font size (frozen contract).
-        className="table-fixed border-separate border-spacing-0 text-[12px] tabular-nums"
+        className="table-fixed border-collapse text-[12px] tabular-nums text-(--text)"
         style={{ width: table.getTotalSize() }}
       >
         <thead>
-          <Header table={table} />
+          <Header table={table} onResizeStart={startColResize} />
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
@@ -593,26 +643,13 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
             <tr>
               <td colSpan={columns.length} className="px-6 py-16 text-center">
                 <div className="text-3xl">🗂️</div>
-                <p className="mt-2 text-sm font-medium text-slate-500">No patients</p>
-                <p className="text-xs text-slate-400">Upload a daily report to get started.</p>
+                <p className="mt-2 text-sm font-medium text-(--text2)">No patients</p>
+                <p className="text-xs text-(--text2)">Upload a daily report to get started.</p>
               </td>
             </tr>
           )}
         </tbody>
       </table>
-      {/* Live drag indicator: follows the cursor during the drag (cheap —
-          no table reflow); the real width lands on release. */}
-      {resizingCol && (
-        // transform (not left): compositor-only update, no layout per frame.
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-20 w-0.5 bg-teal-500"
-          style={{ transform: `translateX(${indicatorX}px)` }}
-        >
-          <span className="absolute left-1.5 top-1.5 rounded-md bg-teal-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-            {indicatorW}px
-          </span>
-        </div>
-      )}
     </div>
   );
 }

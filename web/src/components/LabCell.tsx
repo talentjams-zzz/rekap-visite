@@ -43,7 +43,7 @@ export function LabCell({
   onToggle: (row: RowDto) => void;
 }) {
   const lab = row.lab;
-  if (!lab) return <span className="italic text-zinc-400">—</span>;
+  if (!lab) return <span className="italic text-(--text2)">—</span>;
   return (
     <div>
       {lab.kritis > 0 && (
@@ -56,12 +56,12 @@ export function LabCell({
         onClick={() => onToggle(row)}
         title="Click to expand lab report"
       >
-        <span className="font-bold text-teal-700">{lab.maxDate || '—'}</span>{' '}
-        <span className="text-zinc-500">
+        <span className="font-bold text-(--primary)">{lab.maxDate || '—'}</span>{' '}
+        <span className="text-(--text2)">
           {lab.testCount} tests · {lab.abnormal} abnormal
-          {lab.kritis > 0 && <span className="font-bold text-red-600"> · {lab.kritis} kritis</span>}
+          {lab.kritis > 0 && <span className="font-bold text-(--danger)"> · {lab.kritis} kritis</span>}
         </span>{' '}
-        <span className="text-teal-700">{open ? '▲' : '▼'}</span>
+        <span className="text-(--primary)">{open ? '▲' : '▼'}</span>
       </button>
     </div>
   );
@@ -110,7 +110,7 @@ export function LabPanel({
   for (const t of visible) {
     if (t.jenis !== lastSection) {
       body.push(
-        <tr key={`s-${t.jenis}`} className="border-b border-zinc-300 bg-zinc-200 text-[11px] font-bold text-zinc-700">
+        <tr key={`s-${t.jenis}`} className="border-b border-(--border) bg-[#eee] text-[11px] font-bold text-(--text)">
           <td colSpan={LAB_COLS.length} className="px-2 py-1">
             Jenis: {t.jenis}
           </td>
@@ -120,7 +120,7 @@ export function LabPanel({
     }
     const cls = t.kritis ? 'bg-red-100' : t.abnormal ? 'bg-red-50' : '';
     body.push(
-      <tr key={`${t.jenis}-${t.nama}`} className={`border-b border-zinc-100 ${cls}`}>
+      <tr key={`${t.jenis}-${t.nama}`} className={`border-b border-[#e8e8e8] ${cls}`}>
         <td className="whitespace-nowrap px-2 py-1">{t.nama}</td>
         <td
           className={`whitespace-nowrap px-2 py-1 font-semibold ${
@@ -130,24 +130,24 @@ export function LabPanel({
           {t.hasil}
           {t.kritis && <span className="ml-1 text-[10px] font-bold text-red-700">LK</span>}
         </td>
-        <td className="whitespace-pre-wrap px-2 py-1 text-zinc-600">{t.komentar}</td>
+        <td className="whitespace-pre-wrap px-2 py-1 text-(--text2)">{t.komentar}</td>
         <td className="whitespace-nowrap px-2 py-1">{t.normal}</td>
         <td className="whitespace-nowrap px-2 py-1">{t.satuan}</td>
-        <td className="whitespace-pre-wrap px-2 py-1 text-zinc-600">{t.keterangan}</td>
-        <td className="whitespace-nowrap px-2 py-1 text-zinc-500">{t.tanggal}</td>
+        <td className="whitespace-pre-wrap px-2 py-1 text-(--text2)">{t.keterangan}</td>
+        <td className="whitespace-nowrap px-2 py-1 text-(--text2)">{t.tanggal}</td>
       </tr>,
     );
   }
 
   return (
     <div className="text-xs">
-      <div className="mb-2 flex items-center gap-2 text-sm font-bold text-teal-700">
+      <div className="mb-2 flex items-center gap-2 text-sm font-bold text-(--primary)">
         <span>
           Hasil Laboratorium — {row.nama || '—'} (MR {row.mr}) · {rep.tests.length} test · loaded{' '}
           {rep.loadedAt || '—'}
         </span>
         <button
-          className="rounded border border-zinc-300 bg-white px-2 py-0.5 text-xs font-normal hover:bg-zinc-50"
+          className="rounded border border-(--border) bg-white px-2 py-0.5 text-xs font-normal hover:bg-(--row-hover)"
           onClick={copy}
         >
           📋 Copy
@@ -157,8 +157,8 @@ export function LabPanel({
         <button
           className={`rounded border px-2 py-0.5 text-[11px] ${
             filters.has('abnormal')
-              ? 'border-teal-600 bg-teal-600 text-white'
-              : 'border-zinc-300 bg-white hover:bg-zinc-50'
+              ? 'border-(--primary) bg-(--primary) text-white'
+              : 'border-(--border) bg-white hover:bg-(--row-hover)'
           }`}
           onClick={() => toggleFilter('abnormal')}
         >
@@ -167,20 +167,20 @@ export function LabPanel({
         <button
           className={`rounded border px-2 py-0.5 text-[11px] ${
             filters.has('kritis')
-              ? 'border-red-600 bg-red-600 text-white'
-              : 'border-zinc-300 bg-white hover:bg-zinc-50'
+              ? 'border-(--danger) bg-(--danger) text-white'
+              : 'border-(--border) bg-white hover:bg-(--row-hover)'
           }`}
           onClick={() => toggleFilter('kritis')}
         >
           Kritis ({nKrit})
         </button>
       </div>
-      <div className="max-h-96 overflow-auto rounded border border-zinc-300">
+      <div className="max-h-96 overflow-auto rounded border border-(--border)">
         <table className="w-full border-collapse">
           <thead className="sticky top-0">
             <tr>
               {LAB_COLS.map(([k, label]) => (
-                <th key={k} className="bg-slate-600 px-2 py-1 text-left text-[10px] text-white">
+                <th key={k} className="bg-(--thead) px-2 py-1 text-left text-[10px] text-white">
                   {label}
                 </th>
               ))}

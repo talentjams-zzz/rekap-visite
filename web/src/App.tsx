@@ -223,21 +223,15 @@ export default function App() {
     // Full-height flex column: the page itself never scrolls; the table area
     // is the scroll box, so its header row can stick (sticky inside a plain
     // page scroll + overflow-x wrapper does not work).
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-2.5 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm">
-            <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12h4l2.5-6 4 12 2.5-6h5" />
-            </svg>
-          </span>
-          <div>
-            <h1 className="text-[15px] font-bold leading-tight text-slate-900">Rekap Visite</h1>
-            <p className="text-[11px] font-medium leading-tight text-slate-400">Multicentre · v2</p>
-          </div>
-        </div>
+    <div className="flex h-screen flex-col overflow-hidden bg-(--bg) text-(--text)">
+      {/* V1 topbar: dark slate bar, white text, white/30 buttons. */}
+      <header className="flex shrink-0 flex-wrap items-center gap-4 bg-(--header) px-5 py-3">
+        <h1 className="mr-auto text-[18px] font-bold text-white">
+          Rekap Visite Multicentre{' '}
+          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">v2</span>
+        </h1>
         <button
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
+          className="rounded-md border border-white/30 bg-white/10 px-3.5 py-1.5 text-xs text-white transition-colors hover:bg-white/25 disabled:opacity-50"
           disabled={busyCleanup}
           onClick={handleMaintenance}
           title="Monthly job: back up ALL data, then remove archived patients. Runs automatically on the 1st of each month — this runs it now."
@@ -256,7 +250,7 @@ export default function App() {
             </div>
           )}
           {error && <p className="mb-2 shrink-0 rounded bg-red-100 p-2 text-red-800">API error: {error}</p>}
-          {loading && <p className="shrink-0 text-zinc-500">Loading…</p>}
+          {loading && <p className="shrink-0 text-(--text2)">Loading…</p>}
           {!loading && !error && tab === 'rekap' && (
             <div className="min-h-0 flex-1 overflow-y-auto">
               <Rekap onOpenMR={(_mr, t) => setTab(t)} />
@@ -272,7 +266,7 @@ export default function App() {
                         ? asoFilter
                           ? 'bg-red-700 text-white ring-2 ring-red-300'
                           : 'bg-red-600 text-white hover:bg-red-700'
-                        : 'border border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                        : 'border border-(--border) bg-white text-(--text2) hover:bg-(--row-hover)'
                     }`}
                     onClick={() => setAsoFilter(!asoFilter)}
                   >
@@ -282,9 +276,9 @@ export default function App() {
               )}
               {tab === 'archived' && (
                 <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 text-xs">
-                  <span className="text-zinc-500">Facility:</span>
+                  <span className="text-(--text2)">Facility:</span>
                   <select
-                    className="rounded border border-zinc-300 bg-white px-2 py-1"
+                    className="rounded border border-(--border) bg-white px-2 py-1 text-(--text)"
                     value={archFacility}
                     onChange={(e) => setArchFacility(e.target.value)}
                   >
@@ -295,17 +289,17 @@ export default function App() {
                       </option>
                     ))}
                   </select>
-                  <span className="ml-2 text-zinc-500">Date from:</span>
+                  <span className="ml-2 text-(--text2)">Date from:</span>
                   <input
                     type="date"
-                    className="rounded border border-zinc-300 px-2 py-1"
+                    className="rounded border border-(--border) px-2 py-1 text-(--text)"
                     value={archFrom}
                     onChange={(e) => setArchFrom(e.target.value)}
                   />
-                  <span className="text-zinc-500">to:</span>
+                  <span className="text-(--text2)">to:</span>
                   <input
                     type="date"
-                    className="rounded border border-zinc-300 px-2 py-1"
+                    className="rounded border border-(--border) px-2 py-1 text-(--text)"
                     value={archTo}
                     onChange={(e) => setArchTo(e.target.value)}
                   />
@@ -323,7 +317,7 @@ export default function App() {
                   notify={notify}
                 />
               </div>
-              <p className="mt-2 shrink-0 text-xs text-zinc-400">
+              <p className="mt-2 shrink-0 text-xs text-(--text2)">
                 {title} — {shown.length} row(s)
               </p>
             </div>
@@ -335,7 +329,7 @@ export default function App() {
           <div
             key={t.id}
             className={`rounded border p-3 text-sm shadow ${
-              t.error ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-teal-300 bg-teal-50 text-teal-900'
+              t.error ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-(--primary) bg-[#eef2ff] text-(--primary)'
             }`}
           >
             {t.msg}
