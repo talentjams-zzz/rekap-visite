@@ -63,7 +63,7 @@ function ChecklistCell({ row, onToggleCheck }: { row: RowDto; onToggleCheck: Han
             title={`${key}: ${ts ?? 'not done'} — click to ${ts ? 'clear' : 'check'}`}
             onClick={() => onToggleCheck(row, key)}
             className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors ${
-              ts ? 'bg-(--check-done) text-(--success)' : 'bg-[#eee] text-(--text2)'
+              ts ? 'bg-(--check-done) text-(--success)' : 'bg-(--chip-off-bg) text-(--text2)'
             }`}
           >
             {label}
@@ -89,7 +89,7 @@ function RiwayatBadge({
   return (
     // V1 .btn-history: blue border, #eef2ff fill, inverts on hover.
     <button
-      className="ml-1.5 whitespace-nowrap rounded border border-(--primary) bg-[#eef2ff] px-2 py-0.5 text-[10px] font-medium text-(--primary) transition-colors hover:bg-(--primary) hover:text-white"
+      className="ml-1.5 whitespace-nowrap rounded border border-(--primary) bg-(--badge-bg) px-2 py-0.5 text-[10px] font-medium text-(--primary) transition-colors hover:bg-(--primary) hover:text-white"
       onClick={() => onToggle(row)}
     >
       {open ? '▲' : '▼'} Riwayat ({n})
@@ -114,14 +114,14 @@ function RiwayatRows({
 }) {
   // V1 history rows: #f8fafc background, blue date accent.
   const cell =
-    'overflow-hidden whitespace-pre-wrap border-b border-[#e2e8f0] px-1.5 py-1.5 align-top text-(--text2)';
+    'overflow-hidden whitespace-pre-wrap border-b border-(--border) px-1.5 py-1.5 align-top text-(--text2)';
   return (
     <>
       {days.map((d) => (
-        <tr key={d.date} className="bg-[#f8fafc]">
+        <tr key={d.date} className="bg-(--surface-2)">
           <td className={`${cell} border-l-2 border-l-(--primary)`}>{d.tglRegistrasi ?? ''}</td>
           <td className={cell}>
-            <span className="mr-1.5 rounded bg-[#eef2ff] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--primary)">
+            <span className="mr-1.5 rounded bg-(--badge-bg) px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-(--primary)">
               Riwayat
             </span>
             <span className="tabular-nums font-bold text-(--primary)">{d.date}</span>
@@ -245,14 +245,14 @@ const BodyRow = memo(
           (expanded.days ? (
             <RiwayatRows days={expanded.days} base={row.original} showFacility={showFacility} />
           ) : (
-            <tr className="bg-[#f8fafc]">
+            <tr className="bg-(--surface-2)">
               <td colSpan={colCount} className="p-2 text-xs text-(--text2)">
                 Loading riwayat…
               </td>
             </tr>
           ))}
         {labOpen?.mr === row.original.mr && row.original.lab && (
-          <tr className="bg-[#f8fafc]">
+          <tr className="bg-(--surface-2)">
             <td colSpan={colCount} className="p-2">
               {labOpen.rep ? (
                 <LabPanel row={row.original} rep={labOpen.rep} notify={handlers.notify} />
@@ -499,8 +499,8 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
             <button
               className={`rounded border px-2 py-0.5 text-[11px] transition-colors ${
                 r.archived
-                  ? 'border-(--success) bg-[#f0fdf4] text-(--success) hover:bg-[#dcfce7]'
-                  : 'border-(--danger) bg-(--archive-bg) text-(--danger) hover:bg-[#fee2e2]'
+                  ? 'border-(--success) bg-(--ok-bg) text-(--success) hover:opacity-80'
+                  : 'border-(--danger) bg-(--archive-bg) text-(--danger) hover:opacity-80'
               }`}
               onClick={() => handlers.onToggleArchive(r)}
             >
@@ -611,7 +611,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
   return (
     // The wrapper is the scroll box (both axes) — h-full inside the app's
     // flex column. overflow-x-auto alone would make the sticky header inert.
-    <div className="h-full overflow-auto border border-(--border) bg-white">
+    <div className="h-full overflow-auto border border-(--border) bg-(--card)">
       {/* table-fixed: column widths are exactly what the user resizes them to
           (auto layout let long content push resized columns back out). No
           w-full: the table is exactly the sum of its (resizable) columns, so

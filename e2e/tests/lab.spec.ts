@@ -45,9 +45,9 @@ test('lab upload: summary, sections, abnormal + kritis flags, latest-wins replac
   await page.waitForSelector('text=Hasil Laboratorium');
   expect(await page.locator('td', { hasText: /^Jenis: Hematologi$/ }).count()).toBe(1);
   await expect(row.locator('td', { hasText: 'LK' })).toHaveCount(0);
-  // Abnormal value renders in red (text-red-600 class). The expanded panel
+  // Abnormal value renders in red (text-(--danger) class). The expanded panel
   // is a separate <tr>, so scope to the page.
-  await expect(page.locator('td.font-semibold.text-red-600', { hasText: '5.1' })).toHaveCount(1);
+  await expect(page.locator('td.font-semibold.text-\\(--danger\\)', { hasText: '5.1' })).toHaveCount(1);
 
   // Copy visible tests (clipboard permission granted for headless).
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);

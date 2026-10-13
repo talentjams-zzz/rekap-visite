@@ -20,6 +20,38 @@
   --header: #1e293b;
   --header-text: #fff;
   --thead: #334155;
+  --surface-2: #f8fafc; /* riwayat / lab expanded rows */
+  --badge-bg: #eef2ff;  /* riwayat badge, rekap chips, success toast */
+  --chip-off-bg: #eee;  /* checklist chip (not done) */
+  --ok-bg: #f0fdf4;     /* unarchive button */
+}
+
+/* Dark mode: the whole UI colors off these vars, so the toggle just
+   swaps the palette (the top bar / table header stay dark in both). */
+.dark {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --border: #475569;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --success: #22c55e;
+  --success-hover: #16a34a;
+  --archive-bg: #3f1d1d;
+  --row-hover: #1e3a5f;
+  --check-done: #14532d;
+  --header: #0b1220;
+  --thead: #334155;
+  --surface-2: #24344d;
+  --badge-bg: #1e3a5f;
+  --chip-off-bg: #2b3a52;
+  --ok-bg: #14351f;
+}
+.dark * {
+  scrollbar-color: #475569 transparent;
 }
 
 html {
@@ -32,6 +64,7 @@ html {
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 13px;
+  background: var(--bg);
 }
 
 ::selection {

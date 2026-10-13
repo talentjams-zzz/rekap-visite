@@ -47,7 +47,7 @@ export function LabCell({
   return (
     <div>
       {lab.kritis > 0 && (
-        <div className="mb-1 inline-block rounded-full bg-red-600 px-2 text-[10px] font-bold text-white">
+        <div className="mb-1 inline-block rounded-full bg-(--danger) px-2 text-[10px] font-bold text-white">
           ⚠ Lab Kritis
         </div>
       )}
@@ -110,7 +110,7 @@ export function LabPanel({
   for (const t of visible) {
     if (t.jenis !== lastSection) {
       body.push(
-        <tr key={`s-${t.jenis}`} className="border-b border-(--border) bg-[#eee] text-[11px] font-bold text-(--text)">
+        <tr key={`s-${t.jenis}`} className="border-b border-(--border) bg-(--surface-2) text-[11px] font-bold text-(--text)">
           <td colSpan={LAB_COLS.length} className="px-2 py-1">
             Jenis: {t.jenis}
           </td>
@@ -118,17 +118,17 @@ export function LabPanel({
       );
       lastSection = t.jenis;
     }
-    const cls = t.kritis ? 'bg-red-100' : t.abnormal ? 'bg-red-50' : '';
+    const cls = t.kritis ? 'bg-(--danger)/15' : t.abnormal ? 'bg-(--danger)/10' : '';
     body.push(
       <tr key={`${t.jenis}-${t.nama}`} className={`border-b border-[#e8e8e8] ${cls}`}>
         <td className="whitespace-nowrap px-2 py-1">{t.nama}</td>
         <td
           className={`whitespace-nowrap px-2 py-1 font-semibold ${
-            t.kritis ? 'font-bold text-red-700' : t.abnormal ? 'text-red-600' : ''
+            t.kritis ? 'font-bold text-(--danger)' : t.abnormal ? 'text-(--danger)' : ''
           }`}
         >
           {t.hasil}
-          {t.kritis && <span className="ml-1 text-[10px] font-bold text-red-700">LK</span>}
+          {t.kritis && <span className="ml-1 text-[10px] font-bold text-(--danger)">LK</span>}
         </td>
         <td className="whitespace-pre-wrap px-2 py-1 text-(--text2)">{t.komentar}</td>
         <td className="whitespace-nowrap px-2 py-1">{t.normal}</td>
@@ -147,7 +147,7 @@ export function LabPanel({
           {rep.loadedAt || '—'}
         </span>
         <button
-          className="rounded border border-(--border) bg-white px-2 py-0.5 text-xs font-normal hover:bg-(--row-hover)"
+          className="rounded border border-(--border) bg-(--card) px-2 py-0.5 text-xs font-normal hover:bg-(--row-hover)"
           onClick={copy}
         >
           📋 Copy
@@ -158,7 +158,7 @@ export function LabPanel({
           className={`rounded border px-2 py-0.5 text-[11px] ${
             filters.has('abnormal')
               ? 'border-(--primary) bg-(--primary) text-white'
-              : 'border-(--border) bg-white hover:bg-(--row-hover)'
+              : 'border-(--border) bg-(--card) hover:bg-(--row-hover)'
           }`}
           onClick={() => toggleFilter('abnormal')}
         >
@@ -168,7 +168,7 @@ export function LabPanel({
           className={`rounded border px-2 py-0.5 text-[11px] ${
             filters.has('kritis')
               ? 'border-(--danger) bg-(--danger) text-white'
-              : 'border-(--border) bg-white hover:bg-(--row-hover)'
+              : 'border-(--border) bg-(--card) hover:bg-(--row-hover)'
           }`}
           onClick={() => toggleFilter('kritis')}
         >

@@ -4,9 +4,17 @@ import { uploadLab } from '../api';
 interface Props {
   onUploaded: () => void;
   notify: (msg: string, error?: boolean) => void;
+  /** Rendered inside the dark title bar: V1 topbar button style, no hint. */
+  inHeader?: boolean;
 }
 
-export function UploadBar({ onUploaded, notify }: Props) {
+export function UploadBar({ onUploaded, notify, inHeader = false }: Props) {
+  const btn = inHeader
+    ? 'cursor-pointer rounded-md border border-white/30 bg-white/10 px-2.5 py-1 text-[12px] text-white transition-colors hover:bg-white/25'
+    : 'cursor-pointer rounded bg-(--primary) px-2.5 py-1 text-[13px] font-medium text-white hover:bg-(--primary-hover)';
+  const btn2 = inHeader
+    ? 'ml-2 cursor-pointer rounded-md border border-white/30 bg-white/10 px-2.5 py-1 text-[12px] text-white transition-colors hover:bg-white/25'
+    : 'ml-2 cursor-pointer rounded bg-indigo-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-indigo-700';
   const inputRef = useRef<HTMLInputElement>(null);
   const labRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -64,7 +72,7 @@ export function UploadBar({ onUploaded, notify }: Props) {
   }
 
   return (
-    <div className="mb-1">
+    <div className={inHeader ? 'flex items-center' : 'mb-1'}>
       <input
         ref={inputRef}
         id="file-input"
@@ -83,23 +91,17 @@ export function UploadBar({ onUploaded, notify }: Props) {
         className="hidden"
         onChange={(e) => handleLab(e.target.files)}
       />
-      <label
-        htmlFor="file-input"
-        className="inline-block cursor-pointer rounded bg-(--primary) px-2.5 py-1 text-[13px] font-medium text-white hover:bg-(--primary-hover)"
-      >
+      <label htmlFor="file-input" className={`${btn} ${busy ? 'opacity-60' : ''}`}>
         {busy ? 'Loading…' : '📄 Load Excel Files'}
       </label>
-      <label
-        htmlFor="lab-input"
-        className={`ml-2 inline-block cursor-pointer rounded bg-indigo-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-indigo-700 ${
-          labBusy ? 'opacity-60' : ''
-        }`}
-      >
+      <label htmlFor="lab-input" className={`${btn2} ${labBusy ? 'opacity-60' : ''}`}>
         {labBusy ? 'Loading…' : '🧪 Load Lab Files'}
       </label>
-      <span className="ml-2 text-xs text-(--text2)">
-        registry: nusin/melati/sakura/observasi DD-M-YY.xlsx · handover: operan nusin DD-M-YY.xlsx · lab: lab-{'{'}MR{'}'}.xlsx
-      </span>
+      {!inHeader && (
+        <span className="ml-2 text-xs text-(--text2)">
+          registry: nusin/melati/sakura/observasi DD-M-YY.xlsx · handover: operan nusin DD-M-YY.xlsx · lab: lab-{'{'}MR{'}'}.xlsx
+        </span>
+      )}
     </div>
   );
 }

@@ -30,6 +30,30 @@ interface Toast {
   error?: boolean;
 }
 
+// V1 filter bar order (frozen), with ASO moved to first (user request).
+const FILTER_KEYS = [
+  'aso',
+  'telaah_resep',
+  'catatan_pengobatan',
+  'penelusuran_obat',
+  'rekonsiliasi_obat',
+  'visite',
+  'pto',
+  'konseling',
+  'pio',
+] as const;
+const FILTER_BTNS: Array<[string, string]> = [
+  ['aso', 'ASO ⚠'],
+  ['telaah_resep', 'Telaah Resep'],
+  ['catatan_pengobatan', 'Catatan Pengobatan'],
+  ['penelusuran_obat', 'Penelusuran Obat'],
+  ['rekonsiliasi_obat', 'Rekonsiliasi Obat'],
+  ['visite', 'Visite'],
+  ['pto', 'PTO'],
+  ['konseling', 'Konseling'],
+  ['pio', 'PIO'],
+];
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('nusin');
   const [active, setActive] = useState<RowDto[]>([]);
@@ -37,11 +61,29 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [asoFilter, setAsoFilter] = useState(false);
+  // V1 "Filter undone:" bar (ASO first): multi-select checklist filters.
+  const [undoneFilters, setUndoneFilters] = useState<string[]>([]);
+  // Light/dark theme (persisted; default light = V1).
+  const [dark, setDark] = useState(() => {
+    try {
+      return localStorage.getItem('rekap-theme') === 'dark';
+    } catch {
+      return false;
+    }
+  });
   // Archived-tab filters (v1 archiveFilterBar): facility + registration date range.
   const [archFacility, setArchFacility] = useState('all');
   const [archFrom, setArchFrom] = useState('');
   const [archTo, setArchTo] = useState('');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+    try {
+      localStorage.setItem('rekap-theme', dark ? 'dark' : 'light');
+    } catch {
+      /* private mode */
+    }
+  }, [dark]);
 
   const notify = useCallback((msg: string, isError = false) => {
     const id = Date.now() + Math.random();
@@ -201,6 +243,16 @@ export default function App() {
     return c;
   }, [active, archived]);
 
+  // V1 isItemDone/matchesFilters: a row shows when it is UNDONE for every
+  // active filter (multi-select AND semantics, exactly like v1).
+  // (Must be defined BEFORE `shown` below — the filter callback runs during
+  // its evaluation, and a later const is in the TDZ at that point.)
+  const isItemDone = (r: RowDto, key: string) =>
+    key === 'aso' ? asoDueCount(r) === 0 : !!(r.checklist || {})[key];
+  const matchesFilters = (r: RowDto) => undoneFilters.every((k) => !isItemDone(r, k));
+  const toggleFilter = (key: string) =>
+    setUndoneFilters((f) => (f.includes(key) ? f.filter((x) => x !== key) : [...f, key]));
+
   const shown =
     tab === 'archived'
       ? archived.filter((r) => {
@@ -212,10 +264,22 @@ export default function App() {
           if (archTo && regDate > archTo) return false;
           return true;
         })
-      : active.filter((r) => r.facility === tab && (!asoFilter || asoDueCount(r) > 0));
+      : active.filter((r) => r.facility === tab && matchesFilters(r));
 
-  // ASO warning lives on the per-facility filter button (no top banner).
-  const asoCount = active.filter((r) => r.facility === tab && asoDueCount(r) > 0).length;
+  // Per-facility undone counts for the filter pills (v1 getUndoneCount).
+  const undoneCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    if (tab === 'archived' || tab === 'rekap') return c;
+    for (const r of active) {
+      if (r.facility !== tab) continue;
+      for (const k of FILTER_KEYS) {
+        if (isItemDone(r, k)) continue;
+        c[k] = (c[k] ?? 0) + 1;
+      }
+    }
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, tab]);
   const title =
     tab === 'archived' ? 'Archived' : tab === 'rekap' ? 'Rekap Checklist' : tab.charAt(0).toUpperCase() + tab.slice(1);
 
@@ -230,6 +294,8 @@ export default function App() {
           Rekap Visite Multicentre{' '}
           <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">v2</span>
         </h1>
+        {/* Load buttons live in the title bar (v1 topbar layout). */}
+        <UploadBar inHeader onUploaded={reload} notify={notify} />
         <button
           className="rounded-md border border-white/30 bg-white/10 px-3.5 py-1.5 text-xs text-white transition-colors hover:bg-white/25 disabled:opacity-50"
           disabled={busyCleanup}
@@ -238,6 +304,13 @@ export default function App() {
         >
           {busyCleanup ? 'Running…' : '🧹 Monthly Cleanup'}
         </button>
+        <button
+          className="rounded-md border border-white/30 bg-white/10 px-2 py-1 text-xs text-white transition-colors hover:bg-white/25"
+          onClick={() => setDark(!dark)}
+          title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {dark ? '☀️' : '🌙'}
+        </button>
       </header>
       {/* minimal vertical rhythm: the table gets the space, not the gaps */}
       <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col gap-1 px-3 py-1">
@@ -245,12 +318,7 @@ export default function App() {
           <TabBar tab={tab} onChange={setTab} counts={counts} />
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          {tab !== 'rekap' && (
-            <div className="shrink-0">
-              <UploadBar onUploaded={reload} notify={notify} />
-            </div>
-          )}
-          {error && <p className="mb-2 shrink-0 rounded bg-red-100 p-2 text-red-800">API error: {error}</p>}
+          {error && <p className="mb-1 shrink-0 rounded bg-(--danger)/10 p-2 text-(--danger)">API error: {error}</p>}
           {loading && <p className="shrink-0 text-(--text2)">Loading…</p>}
           {!loading && !error && tab === 'rekap' && (
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -260,26 +328,38 @@ export default function App() {
           {!loading && !error && tab !== 'rekap' && (
             <div className="flex min-h-0 flex-1 flex-col">
               {tab !== 'archived' && (
-                <div className="mb-1 flex shrink-0 items-center gap-2">
-                  <button
-                    className={`rounded-lg px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors ${
-                      asoCount > 0
-                        ? asoFilter
-                          ? 'bg-red-700 text-white ring-2 ring-red-300'
-                          : 'bg-red-600 text-white hover:bg-red-700'
-                        : 'border border-(--border) bg-white text-(--text2) hover:bg-(--row-hover)'
-                    }`}
-                    onClick={() => setAsoFilter(!asoFilter)}
-                  >
-                    ASO ⚠ ({asoCount})
-                  </button>
+                // V1 filter bar (frozen look): "Filter undone:" + pill buttons;
+                // ASO comes first (user request). Active = solid fill.
+                <div className="mb-1 flex shrink-0 flex-wrap items-center gap-1.5 border-b border-(--border) bg-(--card) px-2 py-1">
+                  <span className="mr-1 text-[11px] font-semibold text-(--text2)">Filter undone:</span>
+                  {FILTER_BTNS.map(([k, label]) => {
+                    const n = undoneCounts[k] ?? 0;
+                    const on = undoneFilters.includes(k);
+                    const isAso = k === 'aso';
+                    const cls = on
+                      ? isAso
+                        ? 'border-(--danger) bg-(--danger) font-semibold text-white'
+                        : 'border-(--primary) bg-(--primary) font-semibold text-white'
+                      : isAso && n > 0
+                        ? 'border-(--danger) bg-(--card) font-semibold text-(--danger)'
+                        : 'border-(--border) bg-(--card) text-(--text) hover:border-(--primary) hover:bg-(--row-hover)';
+                    return (
+                      <button
+                        key={k}
+                        className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${cls}`}
+                        onClick={() => toggleFilter(k)}
+                      >
+                        {label} <span className="opacity-70">({n})</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {tab === 'archived' && (
                 <div className="mb-1 flex shrink-0 flex-wrap items-center gap-2 text-xs">
                   <span className="text-(--text2)">Facility:</span>
                   <select
-                    className="rounded border border-(--border) bg-white px-2 py-1 text-(--text)"
+                    className="rounded border border-(--border) bg-(--card) px-2 py-1 text-(--text)"
                     value={archFacility}
                     onChange={(e) => setArchFacility(e.target.value)}
                   >
@@ -293,14 +373,14 @@ export default function App() {
                   <span className="ml-2 text-(--text2)">Date from:</span>
                   <input
                     type="date"
-                    className="rounded border border-(--border) px-2 py-1 text-(--text)"
+                    className="rounded border border-(--border) bg-(--card) px-2 py-1 text-(--text)"
                     value={archFrom}
                     onChange={(e) => setArchFrom(e.target.value)}
                   />
                   <span className="text-(--text2)">to:</span>
                   <input
                     type="date"
-                    className="rounded border border-(--border) px-2 py-1 text-(--text)"
+                    className="rounded border border-(--border) bg-(--card) px-2 py-1 text-(--text)"
                     value={archTo}
                     onChange={(e) => setArchTo(e.target.value)}
                   />
@@ -330,7 +410,7 @@ export default function App() {
           <div
             key={t.id}
             className={`rounded border p-3 text-sm shadow ${
-              t.error ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-(--primary) bg-[#eef2ff] text-(--primary)'
+              t.error ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-(--primary) bg-(--badge-bg) text-(--primary)'
             }`}
           >
             {t.msg}

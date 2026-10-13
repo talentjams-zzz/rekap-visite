@@ -55,13 +55,13 @@ export function Rekap({
     return () => es.close();
   }, [load]);
 
-  if (error) return <p className="rounded bg-red-100 p-2 text-red-800">Rekap error: {error}</p>;
+  if (error) return <p className="rounded bg-(--danger)/10 p-2 text-(--danger)">Rekap error: {error}</p>;
   if (!data) return <p className="text-(--text2)">Loading…</p>;
 
   const dates = Object.keys(data.byDate).sort().reverse();
   if (!dates.length) {
     return (
-      <div className="rounded border border-(--border) bg-white p-6 text-center text-(--text2)">
+      <div className="rounded border border-(--border) bg-(--card) p-6 text-center text-(--text2)">
         <h2 className="text-lg font-semibold text-(--text)">No checklist data</h2>
         <p>Check off items in the patient table and they will appear here.</p>
       </div>
@@ -79,21 +79,21 @@ export function Rekap({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <div className="rounded border border-(--border) bg-white px-3 py-2 text-center">
+        <div className="rounded border border-(--border) bg-(--card) px-3 py-2 text-center">
           <div className="text-xl font-bold text-(--primary)">{data.totalPatients}</div>
           <div className="text-xs text-(--text2)">Total Patients</div>
         </div>
         {data.allKeys.map((key) => (
-          <div key={key} className="rounded border border-(--border) bg-white px-3 py-2 text-center">
+          <div key={key} className="rounded border border-(--border) bg-(--card) px-3 py-2 text-center">
             <div className="text-xl font-bold text-(--primary)">{data.totals[key] ?? 0}</div>
             <div className="text-xs text-(--text2)">{LABEL[key] ?? key}</div>
           </div>
         ))}
       </div>
 
-      <div className="rounded border border-(--border) bg-white p-3">
+      <div className="rounded border border-(--border) bg-(--card) p-3">
         <h3 className="mb-2 font-semibold">Breakdown by Date</h3>
-        <div className="divide-y divide-[#eee]">
+        <div className="divide-y divide-(--border)">
           {dates.map((date) => (
             <div key={date} className="py-2">
               <div className="mb-1 text-sm font-semibold text-(--text)">{formatDatePretty(date)}</div>
@@ -103,7 +103,7 @@ export function Rekap({
                     {LABEL[key] ?? key} ({entry.mrs.length})
                   </span>
                   <button
-                    className="rounded border border-(--border) bg-white px-1.5 py-0.5 text-[11px] hover:bg-(--row-hover)"
+                    className="rounded border border-(--border) bg-(--card) px-1.5 py-0.5 text-[11px] hover:bg-(--row-hover)"
                     onClick={() => copyMRs(entry.mrs)}
                   >
                     📋 Copy MRs
@@ -112,7 +112,7 @@ export function Rekap({
                     <button
                       key={mr}
                       title={entry.names[mr] || ''}
-                      className="rounded bg-[#eef2ff] px-1.5 py-0.5 text-[11px] text-(--primary) hover:bg-[#e0e7ff]"
+                      className="rounded bg-(--badge-bg) px-1.5 py-0.5 text-[11px] text-(--primary) hover:bg-(--row-hover)"
                       onClick={() => {
                         const r = data.rowsByMR[mr];
                         onOpenMR(mr, r && !r.archived ? (r.facility as Tab) : 'archived');

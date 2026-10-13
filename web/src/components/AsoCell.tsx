@@ -21,7 +21,7 @@ export function AsoCell({
   return (
     <div className="min-w-[170px]">
       {due > 0 && (
-        <div className="mb-1 inline-block rounded-full bg-red-600 px-2 text-[10px] font-bold text-white">
+        <div className="mb-1 inline-block rounded-full bg-(--danger) px-2 text-[10px] font-bold text-white">
           ⚠ {due} due to stop
         </div>
       )}
@@ -32,17 +32,17 @@ export function AsoCell({
           <div key={med.id} className="mb-1">
             {row.archived ? (
               <>
-                <div className={d ? 'font-bold text-red-600' : ''}>{med.name || '—'}</div>
+                <div className={d ? 'font-bold text-(--danger)' : ''}>{med.name || '—'}</div>
                 <div className="flex items-center gap-1 text-(--text2)">
                   <span>{med.stopDate || ''}</span>
-                  {med.stopped ? <span className="text-green-700">✓ stopped</span> : <span>…</span>}
+                  {med.stopped ? <span className="text-(--success)">✓ stopped</span> : <span>…</span>}
                 </div>
               </>
             ) : (
               <>
                 <input
                   className={`w-full rounded border px-1 py-0.5 text-xs ${
-                    d ? 'border-red-400 font-bold text-red-600' : 'border-(--border)'
+                    d ? 'border-(--danger) font-bold text-(--danger)' : 'border-(--border)'
                   }`}
                   value={med.name}
                   placeholder="Med name"
@@ -52,7 +52,7 @@ export function AsoCell({
                   <input
                     type="date"
                     className={`rounded border px-1 py-0.5 text-xs ${
-                      d ? 'border-red-400' : 'border-(--border)'
+                      d ? 'border-(--danger)' : 'border-(--border)'
                     }`}
                     value={med.stopDate}
                     onChange={(e) => set(idx, { stopDate: e.target.value })}
@@ -60,8 +60,8 @@ export function AsoCell({
                   <button
                     className={`rounded border px-1.5 text-xs ${
                       med.stopped
-                        ? 'border-green-600 bg-green-600 text-white'
-                        : 'border-(--border) bg-white hover:bg-(--row-hover)'
+                        ? 'border-(--success) bg-(--success) text-white'
+                        : 'border-(--border) bg-(--card) hover:bg-(--row-hover)'
                     }`}
                     title={med.stopped ? `Stopped ${med.stoppedAt || ''}` : 'Confirm stopped'}
                     onClick={() =>
@@ -74,7 +74,7 @@ export function AsoCell({
                     ✓
                   </button>
                   <button
-                    className="rounded border border-(--border) bg-white px-1.5 text-xs hover:bg-red-50"
+                    className="rounded border border-(--border) bg-(--card) px-1.5 text-xs hover:bg-(--row-hover)"
                     title="Remove"
                     onClick={() => onChange(row, meds.filter((_, i) => i !== idx))}
                   >

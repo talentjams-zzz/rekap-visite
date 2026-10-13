@@ -18,7 +18,7 @@ export function TabBar({ tab, onChange, counts }: Props) {
         : 'border-transparent text-(--text) hover:bg-(--row-hover)'
     }`;
   return (
-    <nav className="flex shrink-0 overflow-x-auto border-b-2 border-(--border) bg-white">
+    <nav className="flex shrink-0 overflow-x-auto border-b-2 border-(--border) bg-(--card)">
       {FACILITIES.map((f) => (
         <button key={f} className={cls(f)} onClick={() => onChange(f)}>
           {label(f)} ({counts[f] ?? 0})
