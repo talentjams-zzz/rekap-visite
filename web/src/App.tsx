@@ -223,13 +223,21 @@ export default function App() {
     // Full-height flex column: the page itself never scrolls; the table area
     // is the scroll box, so its header row can stick (sticky inside a plain
     // page scroll + overflow-x wrapper does not work).
-    <div className="flex h-screen flex-col overflow-hidden bg-zinc-100 text-zinc-900">
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 py-2">
-        <h1 className="text-lg font-semibold">
-          Rekap Visite <span className="text-xs font-normal text-zinc-400">v2</span>
-        </h1>
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-2.5 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm">
+            <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12h4l2.5-6 4 12 2.5-6h5" />
+            </svg>
+          </span>
+          <div>
+            <h1 className="text-[15px] font-bold leading-tight text-slate-900">Rekap Visite</h1>
+            <p className="text-[11px] font-medium leading-tight text-slate-400">Multicentre · v2</p>
+          </div>
+        </div>
         <button
-          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
           disabled={busyCleanup}
           onClick={handleMaintenance}
           title="Monthly job: back up ALL data, then remove archived patients. Runs automatically on the 1st of each month — this runs it now."
@@ -242,11 +250,11 @@ export default function App() {
           ⚠️ ASO Alert : {asoTotal} {asoTotal === 1 ? 'med' : 'meds'}
         </div>
       )}
-      <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col p-4">
+      <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col gap-3 p-4">
         <div className="shrink-0">
           <TabBar tab={tab} onChange={setTab} counts={counts} />
         </div>
-        <div className="mt-3 flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           {tab !== 'rekap' && (
             <div className="shrink-0">
               <UploadBar onUploaded={reload} notify={notify} />

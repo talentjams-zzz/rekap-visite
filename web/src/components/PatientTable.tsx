@@ -34,13 +34,33 @@ interface Handlers {
 
 /** Tgl Reg cell: date on line 1, time on line 2 (v1 style). */
 function TglRegCell({ value }: { value: string | null }) {
-  if (!value) return <span className="text-zinc-400">—</span>;
+  if (!value) return <span className="text-slate-300">—</span>;
   const sp = value.indexOf(' ');
   const [d, t] = sp > 0 ? [value.slice(0, sp), value.slice(sp + 1)] : [value, ''];
   return (
     <div className="leading-tight">
-      <div>{d}</div>
-      {t && <div className="text-xs text-zinc-400">{t}</div>}
+      <div className="font-medium tabular-nums text-slate-700">{d}</div>
+      {t && <div className="text-xs tabular-nums text-slate-400">{t}</div>}
+    </div>
+  );
+}
+
+/** Name cell: initials avatar + semibold name (the visual anchor of a row). */
+function NameCell({ value }: { value: string | null }) {
+  if (!value) return <span className="text-slate-300">—</span>;
+  const initials = (value || '?')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-[10px] font-bold text-white shadow-sm">
+        {initials}
+      </span>
+      <span className="truncate font-semibold text-slate-800">{value}</span>
     </div>
   );
 }
@@ -55,8 +75,8 @@ function ChecklistCell({ row, onToggleCheck }: { row: RowDto; onToggleCheck: Han
             key={key}
             title={`${key}: ${ts ?? 'not done'} — click to ${ts ? 'clear' : 'check'}`}
             onClick={() => onToggleCheck(row, key)}
-            className={`rounded px-1 py-0.5 text-[10px] font-semibold hover:ring-1 hover:ring-teal-400 ${
-              ts ? 'bg-teal-100 text-teal-800' : 'bg-zinc-100 text-zinc-400'
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors hover:ring-1 hover:ring-teal-400 ${
+              ts ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-400'
             }`}
           >
             {label}
@@ -81,7 +101,7 @@ function RiwayatBadge({
   if (n <= 0) return null;
   return (
     <button
-      className="whitespace-nowrap text-xs text-teal-700 hover:underline"
+      className="ml-1 inline-flex items-center gap-0.5 whitespace-nowrap rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 ring-1 ring-teal-200 transition-colors hover:bg-teal-100"
       onClick={() => onToggle(row)}
     >
       {open ? '▲' : '▼'} Riwayat ({n})
@@ -104,17 +124,18 @@ function RiwayatRows({
   base: RowDto;
   showFacility: boolean;
 }) {
-  const cell = 'overflow-hidden whitespace-pre-wrap p-2 align-top text-zinc-600';
+  const cell =
+    'overflow-hidden whitespace-pre-wrap border-b border-teal-100/70 px-2.5 py-2 align-top text-slate-500';
   return (
     <>
       {days.map((d) => (
-        <tr key={d.date} className="border-b border-teal-100 bg-teal-50/60">
-          <td className={cell}>{d.tglRegistrasi ?? ''}</td>
+        <tr key={d.date} className="bg-teal-50/40">
+          <td className={`${cell} border-l-2 border-l-teal-300`}>{d.tglRegistrasi ?? ''}</td>
           <td className={cell}>
-            <span className="mr-1 rounded bg-teal-100 px-1 text-[10px] uppercase text-teal-700">
+            <span className="mr-1.5 rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-700">
               Riwayat
             </span>
-            {d.date}
+            <span className="tabular-nums">{d.date}</span>
           </td>
           <td className={cell}>{base.mr}</td>
           {showFacility && <td className={cell}>{base.facility}</td>}
@@ -142,7 +163,7 @@ function Header({ table }: { table: Table<RowDto> }) {
   return (
     // The header row stays pinned to the top of the table's scroll box while
     // the rows scroll under it (the user's "slider on top" request).
-    <tr className="text-left text-xs uppercase tracking-wide text-zinc-600">
+    <tr className="text-left">
       {table.getHeaderGroups().map((hg) =>
         hg.headers.map((header) => {
           const canSort = header.column.getCanSort();
@@ -153,18 +174,18 @@ function Header({ table }: { table: Table<RowDto> }) {
           return (
             <th
               key={header.id}
-              className="sticky top-0 z-10 border-b border-zinc-300 bg-zinc-50 p-0 select-none"
+              className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 p-0 select-none"
               style={{ width: header.getSize() }}
             >
-              <div className="flex items-center gap-1 p-2">
+              <div className="flex items-center gap-1 p-0">
                 <button
-                  className="flex-1 text-left disabled:cursor-default"
+                  className="flex-1 px-2.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:text-slate-800 disabled:cursor-default"
                   disabled={!canSort}
                   onClick={header.column.getToggleSortingHandler()}
                 >
                   {flexRender(header.column.columnDef.header, header.getContext())}
                   {canSort && (
-                    <span className="ml-1 text-zinc-400">
+                    <span className={`ml-1 ${dir ? 'text-teal-600' : 'text-slate-300'}`}>
                       {dir === 'asc' ? '▲' : dir === 'desc' ? '▼' : '↕'}
                     </span>
                   )}
@@ -176,7 +197,7 @@ function Header({ table }: { table: Table<RowDto> }) {
                     onMouseDown={header.getResizeHandler()}
                     onTouchStart={header.getResizeHandler()}
                     title="Drag to resize"
-                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-l border-zinc-300 bg-zinc-100 hover:bg-teal-400"
+                    className="absolute right-0 top-0 h-full w-2 cursor-col-resize border-l border-slate-200 transition-colors hover:bg-teal-300/70"
                   />
                 )}
               </div>
@@ -299,7 +320,12 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
       ...(showFacility
         ? [col.accessor((r) => r.facility, { id: 'facility', header: 'Facility', size: 90 })]
         : []),
-      col.accessor((r) => r.nama, { id: 'nama', header: 'Nama', size: 140 }),
+      col.accessor((r) => r.nama, {
+        id: 'nama',
+        header: 'Nama',
+        size: 150,
+        cell: (info) => <NameCell value={info.getValue()} />,
+      }),
       col.accessor((r) => r.umur, { id: 'umur', header: 'Umur', size: 55 }),
       col.accessor((r) => r.kamar, { id: 'kamar', header: 'Kamar', size: 80 }),
       col.accessor((r) => r.bed, { id: 'bed', header: 'Bed', size: 50 }),
@@ -397,7 +423,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
           const r = info.row.original;
           return (
             <button
-              className="rounded border border-zinc-300 px-1.5 py-0.5 text-xs hover:bg-zinc-100"
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 shadow-sm transition-colors hover:bg-slate-100 hover:text-slate-800"
               onClick={() => handlers.onToggleArchive(r)}
             >
               {r.archived ? '↩' : '🗄'}
@@ -423,13 +449,15 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
   return (
     // The wrapper is the scroll box (both axes) — h-full inside the app's
     // flex column. overflow-x-auto alone would make the sticky header inert.
-    <div className="h-full overflow-auto rounded-b border border-t-0 border-zinc-300 bg-white">
+    <div className="h-full overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* table-fixed: column widths are exactly what the user resizes them to
           (auto layout let long content push resized columns back out). No
           w-full: the table is exactly the sum of its (resizable) columns, so
-          resizing is not squished back; the wrapper scrolls both axes. */}
+          resizing is not squished back; the wrapper scrolls both axes.
+          border-separate (not collapse) keeps the sticky header's border
+          pinned to the header row while rows scroll under it. */}
       <table
-        className="table-fixed border-collapse text-sm"
+        className="table-fixed border-separate border-spacing-0 text-sm tabular-nums"
         style={{ width: table.getTotalSize() }}
       >
         <thead>
@@ -438,9 +466,12 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         <tbody>
           {table.getRowModel().rows.map((row) => (
             <Fragment key={row.id}>
-              <tr className="border-b border-zinc-100 hover:bg-teal-50/40">
+              <tr className="transition-colors hover:bg-teal-50/70">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="overflow-hidden p-2 align-top">
+                  <td
+                    key={cell.id}
+                    className="overflow-hidden border-b border-slate-100 px-2.5 py-2 align-top text-slate-700"
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -470,8 +501,10 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={columns.length} className="p-6 text-center text-zinc-400">
-                No patients.
+              <td colSpan={columns.length} className="px-6 py-16 text-center">
+                <div className="text-3xl">🗂️</div>
+                <p className="mt-2 text-sm font-medium text-slate-500">No patients</p>
+                <p className="text-xs text-slate-400">Upload a daily report to get started.</p>
               </td>
             </tr>
           )}
