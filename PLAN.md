@@ -9,10 +9,11 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
 
 - [x] **P0 — Seed repo**: reference snapshot of v1, real data copied locally
       (gitignored), SPEC v2 + this plan.
-- [ ] **P1 — Backend skeleton**: pnpm workspace (`/server`, `/web`), Fastify +
-      SQLite schema (`schema.sql`), `GET /api/health`, serve `web/dist`.
-      `scripts/migrate-v1.mjs` from `master_data.json` → SQLite + count
-      verification against the source JSON.
+- [x] **P1 — Backend skeleton**: pnpm workspace (`/server`, `/web`), Fastify +
+      SQLite schema (`schema.sql`, engine: `node:sqlite` — built into Node 26,
+      zero native deps), `GET /api/health`, serve `web/dist` + SPA fallback.
+      `scripts/migrate-v1.mjs` from `master_data.json` → SQLite — all 12 count
+      checks PASS against real data (369 patients, 1317 riwayat, 233 labs).
 - [ ] **P2 — Merge core (pure TS, no I/O)** in `server/src/core/`:
       filename parsing (facility + `DD-M-YY` date), registry/handover/lab
       parsers, merge rules (latest-file-wins, riwayat append, telaah reset on

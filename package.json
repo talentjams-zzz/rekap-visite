@@ -1,0 +1,14 @@
+{
+  "name": "rekap-visite",
+  "private": true,
+  "version": "2.0.0",
+  "packageManager": "pnpm@12.9.1",
+  "scripts": {
+    "dev": "pnpm --parallel --filter server --filter web dev",
+    "dev:server": "pnpm --filter server dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm --filter web build && pnpm --filter server build",
+    "start": "node server/dist/index.js",
+    "migrate": "node scripts/migrate-v1.mjs"
+  }
+}

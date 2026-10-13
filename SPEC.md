@@ -20,7 +20,7 @@ rebuild. This document supersedes it only where explicitly stated below.
 | Tables | TanStack Table | dense data: sorting, per-facility columns, resizable |
 | Styling | Tailwind CSS | re-skinned from v1 look, not ported 1:1 |
 | Backend | Node 20 + Fastify | single process serves API + static `dist/` |
-| Database | SQLite (`better-sqlite3`) | one `rekap.db` file (gitignored) |
+| Database | SQLite (`node:sqlite`, built into Node 26) | one `rekap.db` file (gitignored), zero native deps |
 | Live sync | SSE | same pattern as v1 `server.js` |
 | Excel parsing | **server-side** (node `xlsx`) | v1 parsed client-side; v2 uploads via API |
 | Auth | none | single user, tailscale-only network |
