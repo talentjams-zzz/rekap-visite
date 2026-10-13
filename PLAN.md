@@ -27,8 +27,12 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       Rekap placeholder; per-facility columns (Nusin gets Diagnosis/Operan/
       Terapi), sorting (default Tgl Reg desc, time-aware), resizable columns
       persisted in localStorage. Playwright smoke: 55 active / 314 archived.
-- [ ] **P4 — Upload flow**: file picker → `POST /api/uploads` → result toast
-      (added/merged/skipped/warnings); SSE subscription live-refreshes rows.
+- [x] **P4 — Upload flow**: `POST /api/uploads` (multipart, xlsx parsed
+      server-side via P2 core, upload-time = input timestamp), SQLite
+      write-back, uploads audit table (sha256), SSE `change` broadcast
+      (uploads + auto-migration); UI: upload bar + toasts + EventSource
+      live refresh. UI round-trip verified: 20 active → upload → toast
+      "+1 new · 20 archived" → table + tab counts update without reload.
 - [ ] **P5 — Row interactions**: 7-item checklist with timestamps, note
       editing, archive/unarchive, riwayat expand (inline per-day table),
       manual riwayat edit.

@@ -1,15 +1,18 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
+import fastifyMultipart from '@fastify/multipart';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
+import { registerEvents } from './events.js';
 import {
   isSourceNewer,
   migrationState,
   runMigration,
   type V1Master,
 } from './migrate.js';
+import { registerUploads } from './uploads.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
@@ -22,6 +25,10 @@ const APP_VERSION = '2.0.0';
 const db = openDb(dbFile);
 const app = Fastify({ logger: true });
 const schemaSql = readFileSync(path.join(root, 'server', 'schema.sql'), 'utf8');
+
+const events = registerEvents(app);
+await app.register(fastifyMultipart, { limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
+registerUploads(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
 
 function loadMaster(): V1Master | null {
   if (!existsSync(masterFile)) return null;
@@ -41,6 +48,7 @@ function autoMigrate(reason: string): boolean {
   const report = runMigration(db, src, schemaSql);
   if (report.ok) {
     app.log.info({ reason, version: src.version }, 'auto-migrated from v1 master_data.json');
+    events.broadcast('change', { at: new Date().toISOString(), reason });
   } else {
     app.log.error({ reason, version: src.version, checks: report.checks },
       'auto-migration verification FAILED');
