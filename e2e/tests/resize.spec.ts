@@ -16,6 +16,10 @@ test('every column header has a resize grip and dragging resizes the column', as
   await uploadFiles(page, [f]);
   await waitRows(base, 'active', (r) => r.length === 1);
 
+  // Regression guard: a bare `//` comment inside JSX children renders as
+  // literal text above every row (it happened — don't let it come back).
+  expect(await page.locator('table').first().innerText()).not.toContain('//');
+
   // Every column — including display columns — is resizable.
   const colCount = await page.locator('thead th').count();
   const grips = page.locator('thead span[title="Drag to resize"]');

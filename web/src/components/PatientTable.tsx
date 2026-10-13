@@ -231,7 +231,6 @@ const BodyRow = memo(
   }) {
     return (
       <Fragment>
-        // V1: 6px cell padding, #ddd row separator, light-blue row hover.
         <tr className="transition-colors hover:bg-(--row-hover)">
           {row.getVisibleCells().map((cell) => (
             <td
