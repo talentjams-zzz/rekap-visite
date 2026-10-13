@@ -23,5 +23,13 @@ export function openDb(file: string): DatabaseSync {
   if (!cols.some((c) => c.name === 'rev')) {
     db.exec('ALTER TABLE patients ADD COLUMN rev INTEGER NOT NULL DEFAULT 0');
   }
+  if (!cols.some((c) => c.name === 'soap')) {
+    db.exec('ALTER TABLE patients ADD COLUMN soap TEXT');
+  }
+  // patient_days predates SOAP on existing databases.
+  const dayCols = db.prepare('PRAGMA table_info(patient_days)').all() as { name: string }[];
+  if (!dayCols.some((c) => c.name === 'soap')) {
+    db.exec('ALTER TABLE patient_days ADD COLUMN soap TEXT');
+  }
   return db;
 }

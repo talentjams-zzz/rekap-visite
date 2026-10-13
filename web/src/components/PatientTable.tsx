@@ -78,6 +78,7 @@ const HISTORY_COLS: [keyof HistoryEntry, string][] = [
   ['diagnosis', 'Diagnosis'],
   ['operan', 'Operan'],
   ['terapi', 'Terapi'],
+  ['soap', 'SOAP'],
 ];
 
 /** Riwayat badge: expands an inline table of PAST days (fetched on demand). */
@@ -352,6 +353,20 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
             value={info.getValue()}
             className="text-xs"
             onSave={(v) => handlers.onEditField(info.row.original, 'pharmacistNote', v)}
+          />
+        ),
+      }),
+      // SOAP: free text, resets to blank on the next day; the previous day's
+      // value moves to Riwayat automatically (per-day snapshot).
+      col.accessor((r) => r.soap, {
+        id: 'soap',
+        header: 'SOAP',
+        size: 160,
+        cell: (info) => (
+          <EditableCell
+            value={info.getValue() ?? ''}
+            className="text-xs"
+            onSave={(v) => handlers.onEditField(info.row.original, 'soap', v)}
           />
         ),
       }),

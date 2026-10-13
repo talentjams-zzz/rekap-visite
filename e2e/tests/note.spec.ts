@@ -21,8 +21,8 @@ test('note + diagnosis/operan/terapi editable on a non-nusin facility and persis
 
   const row = rowFor(page, '300001');
 
-  // Note (last editable cell before the actions column).
-  const noteCell = row.locator('span.cursor-text').last();
+  // Editable cells in order: diagnosis(0), operan(1), terapi(2), note(3), soap(4).
+  const noteCell = row.locator('span.cursor-text').nth(3);
   await noteCell.click();
   await row.locator('textarea').last().fill('NOTE P8');
   await row.locator('textarea').last().blur();

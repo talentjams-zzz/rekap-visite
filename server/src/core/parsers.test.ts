@@ -71,6 +71,32 @@ describe('parseRegistry', () => {
     expect(r.history.map((h) => h.date)).toEqual(['2026-08-27', '2026-08-26']);
   });
 
+  it('SOAP clears on a new day; the old day keeps it in its snapshot; new day blank', () => {
+    const state = emptyState();
+    parseRegistry(state, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. A', '', 'F', 'V', 'Mawar', '3']]), '2026-08-26', '2026-08-26 08:00:00');
+    const r = state.rows[0];
+    // Pharmacist writes the day's SOAP (UI edit path: live row + day snapshot).
+    r.soap = 'S: stable';
+    r.history[0].soap = 'S: stable';
+    parseRegistry(state, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. A', '', 'F', 'V', 'Sakura', '7']]), '2026-08-27', '2026-08-27 08:00:00');
+    expect(r.soap).toBe(''); // daily reset
+    const d26 = r.history.find((h) => h.date === '2026-08-26')!;
+    const d27 = r.history.find((h) => h.date === '2026-08-27')!;
+    expect(d26.soap).toBe('S: stable'); // moved to riwayat
+    expect(d27.soap).toBeUndefined(); // fresh day is blank
+  });
+
+  it('SOAP survives a same-day re-import (idempotent)', () => {
+    const state = emptyState();
+    parseRegistry(state, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. A', '', 'F', 'V', 'Mawar', '3']]), '2026-08-26', '2026-08-26 08:00:00');
+    const r = state.rows[0];
+    r.soap = 'S: stable';
+    r.history[0].soap = 'S: stable';
+    parseRegistry(state, F, regSheet([['', 'R1', '104640', 'Aysha', '', '26', 'dr. A', '', 'F', 'V', 'Mawar', '3']]), '2026-08-26', '2026-08-26 09:00:00');
+    expect(r.soap).toBe('S: stable');
+    expect(r.history.find((h) => h.date === '2026-08-26')!.soap).toBe('S: stable');
+  });
+
   it('numeric MR (leading zero dropped) merges into the zero-padded row', () => {
     const state = emptyState();
     parseRegistry(state, F, regSheet([['', 'R1', '067016', 'Zero', '', '26', 'dr. A', '', 'F', 'V', 'K1', '1']]), '2026-08-26', '2026-08-26 08:00:00');

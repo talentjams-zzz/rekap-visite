@@ -14,6 +14,8 @@ export interface RowDto {
   operan: string | null;
   terapi: string | null;
   pharmacistNote: string | null;
+  /** Daily free-text SOAP note (cleared each new day; previous day → riwayat). */
+  soap: string | null;
   /** Optimistic-concurrency revision — echo it back on row writes. */
   rev: number;
   aso: AsoMed[];
@@ -51,7 +53,7 @@ export const CHECKLIST_LABELS: [string, string][] = [
 export const ROW_ITEM_KEYS = new Set(['telaah_resep', 'catatan_pengobatan', 'pio']);
 
 /** Fields editable in place (v1 EDITABLE_KEYS). */
-export const EDITABLE_KEYS = ['diagnosis', 'operan', 'terapi', 'pharmacistNote'] as const;
+export const EDITABLE_KEYS = ['diagnosis', 'operan', 'terapi', 'pharmacistNote', 'soap'] as const;
 export type EditableKey = (typeof EDITABLE_KEYS)[number];
 
 /** GET /api/rekap — v1 buildRekapData shape. */
@@ -104,6 +106,7 @@ export interface HistoryEntry {
   diagnosis: string | null;
   operan: string | null;
   terapi: string | null;
+  soap: string | null;
 }
 
 /** Client-side 'YYYY-MM-DD HH:MM:SS' (v1 nowDT()). */

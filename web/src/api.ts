@@ -54,6 +54,7 @@ export interface RowPatch {
   diagnosis?: string;
   operan?: string;
   terapi?: string;
+  soap?: string;
   rev?: number;
 }
 

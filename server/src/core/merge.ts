@@ -74,6 +74,9 @@ export function touchRowDate(
 ): void {
   if (!row.checklist) row.checklist = { telaah_resep: null, catatan_pengobatan: null, pio: null };
   if (today > row.dateAdded) {
+    // SOAP is a daily field: the previous day's text is already archived in
+    // that day's history snapshot (riwayat), so the live cell just clears.
+    row.soap = '';
     for (const key of DAILY_RESET_ITEMS) {
       const tsv = row.checklist[key];
       if (tsv) {

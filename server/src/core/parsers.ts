@@ -37,6 +37,7 @@ export function newPatientRow(
     diagnosis: '',
     operan: '',
     terapi: '',
+    soap: '',
     checklist: { telaah_resep: null, catatan_pengobatan: null, pio: null },
     pharmacistNote: '',
     aso: [],

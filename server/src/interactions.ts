@@ -9,7 +9,10 @@ const ROW_ITEM_KEYS = ['telaah_resep', 'catatan_pengobatan', 'pio'];
 const PATIENT_ITEM_KEYS = ['visite', 'pto', 'konseling', 'rekonsiliasi_obat', 'penelusuran_obat'];
 // SAFETY: the only column names ever interpolated into UPDATE/INSERT below;
 // all values go through `?` parameters.
-const EDITABLE_FIELDS = ['diagnosis', 'operan', 'terapi'] as const;
+// soap: daily free text — like the others it is recorded into the CURRENT
+// day's snapshot so it shows in Riwayat once the day advances (and the live
+// cell is cleared by touchRowDate).
+const EDITABLE_FIELDS = ['diagnosis', 'operan', 'terapi', 'soap'] as const;
 // Fixed SQL per editable field — no runtime string building (values via `?`).
 const FIELD_SQL: Record<
   (typeof EDITABLE_FIELDS)[number],
@@ -29,6 +32,11 @@ const FIELD_SQL: Record<
     upd: 'UPDATE patients SET terapi = ? WHERE id = ?',
     dayUpd: 'UPDATE patient_days SET terapi = ? WHERE id = ?',
     dayIns: 'INSERT INTO patient_days (patient_id, report_date, terapi) VALUES (?,?,?)',
+  },
+  soap: {
+    upd: 'UPDATE patients SET soap = ? WHERE id = ?',
+    dayUpd: 'UPDATE patient_days SET soap = ? WHERE id = ?',
+    dayIns: 'INSERT INTO patient_days (patient_id, report_date, soap) VALUES (?,?,?)',
   },
 };
 
@@ -147,6 +155,7 @@ export function registerInteractions(
       diagnosis?: string;
       operan?: string;
       terapi?: string;
+      soap?: string;
       rev?: number;
     };
     const row = db
@@ -206,7 +215,7 @@ export function registerInteractions(
     }
     const days = db
       .prepare(
-        `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi
+        `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap
          FROM patient_days
          WHERE patient_id = ? AND report_date != ?
          ORDER BY report_date DESC`,
@@ -223,6 +232,7 @@ export function registerInteractions(
       diagnosis: (d.diagnosis as string) ?? null,
       operan: (d.operan as string) ?? null,
       terapi: (d.terapi as string) ?? null,
+      soap: (d.soap as string) ?? null,
     }));
   });
 }

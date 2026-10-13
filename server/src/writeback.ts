@@ -61,7 +61,7 @@ export function writeBackToV1(db: DatabaseSync, masterFile: string): WriteBackRe
   const patients = db
     .prepare(
       `SELECT id, mr, facility, date_added, tgl_registrasi, nama, umur, kamar, bed, dokter,
-              diagnosis, operan, terapi, pharmacist_note, aso_json, archived, archived_at, last_seen
+              diagnosis, operan, terapi, pharmacist_note, soap, aso_json, archived, archived_at, last_seen
        FROM patients`,
     )
     .all() as Record<string, unknown>[];
@@ -95,6 +95,7 @@ export function writeBackToV1(db: DatabaseSync, masterFile: string): WriteBackRe
       diagnosis: (h.diagnosis as string) ?? null,
       operan: (h.operan as string) ?? null,
       terapi: (h.terapi as string) ?? null,
+      soap: (h.soap as string) ?? null,
     }));
 
     const aso = parseJsonArray<unknown>(p.aso_json as string | null, []);
@@ -116,6 +117,7 @@ export function writeBackToV1(db: DatabaseSync, masterFile: string): WriteBackRe
       // sparse like v1: only present when non-empty
       ...(aso.length > 0 ? { aso } : {}),
       pharmacistNote: (p.pharmacist_note as string) ?? '',
+      soap: (p.soap as string) ?? '',
       archived: Number(p.archived) === 1,
       archivedAt: (p.archived_at as string) ?? null,
       // legacy carry-through (v1 per-day checklist archives)

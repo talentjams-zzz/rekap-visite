@@ -14,7 +14,7 @@ type Rec = Record<string, unknown>;
 export function loadWorldState(db: DatabaseSync): WorldState {
   const rows = db.prepare('SELECT * FROM patients').all() as Rec[];
   const days = db
-    .prepare('SELECT patient_id, report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi FROM patient_days')
+    .prepare('SELECT patient_id, report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap FROM patient_days')
     .all() as Rec[];
   const rc = db.prepare('SELECT patient_id, item_key, checked_at FROM row_checklist').all() as Rec[];
   const logs = db.prepare('SELECT patient_id, item_key, date, ts FROM daily_logs').all() as Rec[];
@@ -34,6 +34,7 @@ export function loadWorldState(db: DatabaseSync): WorldState {
       diagnosis: (d.diagnosis as string) ?? undefined,
       operan: (d.operan as string) ?? undefined,
       terapi: (d.terapi as string) ?? undefined,
+      soap: (d.soap as string) ?? undefined,
     });
     daysBy.set(String(d.patient_id), list);
   }
@@ -73,6 +74,7 @@ export function loadWorldState(db: DatabaseSync): WorldState {
       diagnosis: (r.diagnosis as string) ?? '',
       operan: (r.operan as string) ?? '',
       terapi: (r.terapi as string) ?? '',
+      soap: (r.soap as string) ?? '',
       checklist: {
         telaah_resep: null,
         catatan_pengobatan: null,
@@ -115,8 +117,8 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
   try {
     const insP = db.prepare(`
       INSERT INTO patients (id, mr, facility, date_added, tgl_registrasi, nama, umur, kamar, bed,
-                            dokter, diagnosis, operan, terapi, pharmacist_note, aso_json, rev, archived, archived_at, last_seen)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            dokter, diagnosis, operan, terapi, pharmacist_note, soap, aso_json, rev, archived, archived_at, last_seen)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         date_added = excluded.date_added,
         tgl_registrasi = excluded.tgl_registrasi,
@@ -129,6 +131,7 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
         operan = excluded.operan,
         terapi = excluded.terapi,
         pharmacist_note = excluded.pharmacist_note,
+        soap = excluded.soap,
         archived = excluded.archived,
         archived_at = excluded.archived_at,
         last_seen = excluded.last_seen`);
@@ -139,20 +142,20 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
         r.id, r.mr, r.facility, r.dateAdded || null, r.tglRegistrasi || null,
         r.nama || null, r.umur || null, r.kamar || null, r.bed || null,
         r.dokter || null, r.diagnosis || null, r.operan || null, r.terapi || null,
-        r.pharmacistNote || null, JSON.stringify(r.aso ?? []), r.rev ?? 0, r.archived ? 1 : 0, r.archivedAt, r.lastSeen,
+        r.pharmacistNote || null, r.soap || null, JSON.stringify(r.aso ?? []), r.rev ?? 0, r.archived ? 1 : 0, r.archivedAt, r.lastSeen,
       );
     }
 
     db.prepare('DELETE FROM patient_days').run();
     const insD = db.prepare(`
       INSERT INTO patient_days (patient_id, report_date, tgl_registrasi, nama, umur, kamar, bed,
-                                dokter, diagnosis, operan, terapi)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+                                dokter, diagnosis, operan, terapi, soap)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
     for (const r of state.rows) {
       for (const h of r.history) {
         insD.run(r.id, h.date, h.tglRegistrasi ?? null, h.nama ?? null, h.umur ?? null,
           h.kamar ?? null, h.bed ?? null, h.dokter ?? null, h.diagnosis ?? null,
-          h.operan ?? null, h.terapi ?? null);
+          h.operan ?? null, h.terapi ?? null, h.soap ?? null);
       }
     }
 

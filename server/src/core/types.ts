@@ -17,7 +17,7 @@ export const DAILY_LOG_FIELD: Record<string, 'telaahLog' | 'catatanLog' | 'pioLo
 
 export const HISTORY_FIELDS = [
   'tglRegistrasi', 'nama', 'umur', 'kamar', 'bed',
-  'dokter', 'diagnosis', 'operan', 'terapi',
+  'dokter', 'diagnosis', 'operan', 'terapi', 'soap',
 ] as const;
 
 export interface HistoryEntry {
@@ -31,6 +31,7 @@ export interface HistoryEntry {
   diagnosis?: string;
   operan?: string;
   terapi?: string;
+  soap?: string;
 }
 
 export interface LogEntry {
@@ -65,6 +66,9 @@ export interface PatientRow {
   terapi: string;
   checklist: Record<RowChecklistItem, string | null>;
   pharmacistNote: string;
+  /** Daily free-text SOAP note. Cleared when a new day's file arrives; the
+   * previous day's value lives on in that day's history snapshot (riwayat). */
+  soap: string;
   aso: AsoMed[];
   rev: number; // optimistic-concurrency revision (DB-bumped on row writes)
   archived: boolean;

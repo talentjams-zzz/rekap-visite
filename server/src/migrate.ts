@@ -101,9 +101,9 @@ export function runMigration(db: DatabaseSync, src: V1Master, schemaSql: string)
 
     const insP = db.prepare(`
       INSERT INTO patients (id, mr, facility, date_added, tgl_registrasi, nama, umur, kamar, bed,
-                            dokter, diagnosis, operan, terapi, pharmacist_note, aso_json, archived, archived_at, last_seen)
+                            dokter, diagnosis, operan, terapi, pharmacist_note, soap, aso_json, archived, archived_at, last_seen)
       VALUES (:id, :mr, :facility, :dateAdded, :tglRegistrasi, :nama, :umur, :kamar, :bed,
-              :dokter, :diagnosis, :operan, :terapi, :note, :aso, :archived, :archivedAt, :lastSeen)`);
+              :dokter, :diagnosis, :operan, :terapi, :note, :soap, :aso, :archived, :archivedAt, :lastSeen)`);
     for (const r of rows) {
       insP.run({
         id: r.id,
@@ -120,6 +120,7 @@ export function runMigration(db: DatabaseSync, src: V1Master, schemaSql: string)
         operan: r.operan ?? null,
         terapi: r.terapi ?? null,
         note: r.pharmacistNote ?? null,
+        soap: (r.soap as string | null) ?? null,
         aso: JSON.stringify(Array.isArray(r.aso) ? r.aso : []),
         archived: r.archived ? 1 : 0,
         archivedAt: r.archivedAt ?? null,
@@ -129,13 +130,13 @@ export function runMigration(db: DatabaseSync, src: V1Master, schemaSql: string)
 
     const insD = db.prepare(`
       INSERT INTO patient_days (patient_id, report_date, tgl_registrasi, nama, umur, kamar, bed,
-                                dokter, diagnosis, operan, terapi)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                                dokter, diagnosis, operan, terapi, soap)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const r of rows) {
       for (const h of r.history || []) {
         insD.run(r.id, h.date, h.tglRegistrasi ?? null, h.nama ?? null, h.umur ?? null,
           h.kamar ?? null, h.bed ?? null, h.dokter ?? null, h.diagnosis ?? null,
-          h.operan ?? null, h.terapi ?? null);
+          h.operan ?? null, h.terapi ?? null, (h as { soap?: string | null }).soap ?? null);
       }
     }
 

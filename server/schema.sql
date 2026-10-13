@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS patients (
   operan           TEXT,
   terapi           TEXT,
   pharmacist_note  TEXT,
+  soap             TEXT,                        -- daily free text; cleared on day advance (v2 feature)
   aso_json         TEXT NOT NULL DEFAULT '[]',  -- [{id,name,stopDate,stopped,stoppedAt}] (v1 row.aso)
   rev              INTEGER NOT NULL DEFAULT 0,  -- optimistic-concurrency revision (bumped on every row write)
   archived         INTEGER NOT NULL DEFAULT 0,
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS patient_days (
   diagnosis       TEXT,
   operan          TEXT,
   terapi          TEXT,
+  soap            TEXT,                         -- that day's SOAP (moved here when the day advances)
   UNIQUE (patient_id, report_date)
 );
 CREATE INDEX IF NOT EXISTS idx_patient_days_patient ON patient_days (patient_id);
