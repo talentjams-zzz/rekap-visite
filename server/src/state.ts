@@ -115,7 +115,7 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
     const insP = db.prepare(`
       INSERT INTO patients (id, mr, facility, date_added, tgl_registrasi, nama, umur, kamar, bed,
                             dokter, diagnosis, operan, terapi, pharmacist_note, aso_json, archived, archived_at, last_seen)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         date_added = excluded.date_added,
         tgl_registrasi = excluded.tgl_registrasi,

@@ -187,7 +187,10 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
     { id: 'tglRegistrasi', desc: true },
   ]);
   const [expanded, setExpanded] = useState<{ id: string; days: HistoryEntry[] | null } | null>(null);
-  const [labOpen, setLabOpen] = useState<{ mr: string; rep: LabReport | null } | null>(null);
+  const [labOpen, setLabOpen] = useState<{ mr: string; rep: LabReport | null; sig: string } | null>(null);
+
+  const labSig = (r: RowDto) =>
+    r.lab ? `${r.lab.maxDate}|${r.lab.testCount}|${r.lab.loadedAt}` : '';
 
   const toggleRiwayat = (row: RowDto) => {
     if (expanded?.id === row.id) {
@@ -209,10 +212,11 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
       return;
     }
     if (!row.lab) return;
-    setLabOpen({ mr: row.mr, rep: null });
+    const sig = labSig(row);
+    setLabOpen({ mr: row.mr, rep: null, sig });
     fetchLab(row.mr)
       .then((rep) => {
-        if (rep) setLabOpen({ mr: row.mr, rep });
+        if (rep) setLabOpen({ mr: row.mr, rep, sig });
         else {
           setLabOpen(null);
           handlers.notify('No lab report found', true);
@@ -223,6 +227,23 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
         handlers.notify('Failed to load lab report', true);
       });
   };
+
+  // Keep an open panel in sync when the underlying report changes (e.g. an
+  // upload on another device triggers an SSE reload) — v1 always re-rendered
+  // the panel from current state.
+  useEffect(() => {
+    if (!labOpen) return;
+    const cur = rows.find((r) => r.mr === labOpen.mr);
+    if (!cur || !cur.lab || labSig(cur) === labOpen.sig) return;
+    const sig = labSig(cur);
+    setLabOpen({ mr: labOpen.mr, rep: null, sig });
+    fetchLab(labOpen.mr)
+      .then((rep) => {
+        if (rep) setLabOpen((o) => (o && o.mr === labOpen.mr ? { mr: o.mr, rep, sig } : o));
+      })
+      .catch(() => setLabOpen(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(columnSizing));

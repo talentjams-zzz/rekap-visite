@@ -57,9 +57,19 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       Rekap tab: stat cards + per-date breakdown + Copy MRs + MR tags that
       jump to the row's tab. Archived tab: facility dropdown + Tgl Reg
       date-range filter (date-part compare, v1 boundary semantics).
-- [ ] **P8 — E2E port**: v1 `test_*.py` → TypeScript Playwright in
-      `e2e/`, driven against dev server with isolated DB (same approach as
-      v1 `conftest.py`).
+- [x] **P8 — E2E port**: `e2e/` (Node Playwright, `pnpm test:e2e`) —
+      12 specs porting v1's 23 `test_*.py` behaviors against scratch servers
+      (isolated master+DB+port per test, synthetic fixtures, no PHI):
+      checklist reset semantics (telaah/pio/CP), riwayat + manual-riwayat
+      regression, lab (parse/flags/sections/copy/latest-wins/skip), ASO +
+      banner, auto-archive/unarchive, MR leading zeros, time-aware Tgl Reg
+      sort, editable fields on all facilities. `test_monthly_cleanup` →
+      fixme (P9); v1 local-file save mode has no v2 equivalent (server
+      persistence). **Found + fixed 2 real bugs**: state.ts write-back
+      INSERT had 19 placeholders for 18 cols (P6's aso change — every
+      registry upload 500'd, undetected because P6 verified lab uploads
+      only); expanded lab panel went stale after SSE reload (now
+      signature-checked auto-refresh).
 - [ ] **P9 — Hardening**: optimistic-concurrency 409 handling in client,
       error toasts, empty states, maintenance job (monthly backup + cleanup),
       upload dedupe by sha256.

@@ -10,6 +10,7 @@
     "build": "pnpm --filter web build && pnpm --filter server build",
     "start": "node server/dist/index.js",
     "migrate": "node scripts/migrate-v1.ts",
-    "test": "pnpm --filter server test"
+    "test": "pnpm --filter server test",
+    "test:e2e": "pnpm build && pnpm --filter rekap-e2e test"
   }
 }
