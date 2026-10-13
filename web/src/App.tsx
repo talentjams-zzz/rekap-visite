@@ -225,7 +225,7 @@ export default function App() {
     // page scroll + overflow-x wrapper does not work).
     <div className="flex h-screen flex-col overflow-hidden bg-(--bg) text-(--text)">
       {/* V1 topbar: dark slate bar, white text, white/30 buttons. */}
-      <header className="flex shrink-0 flex-wrap items-center gap-4 bg-(--header) px-5 py-2">
+      <header className="flex shrink-0 flex-wrap items-center gap-4 bg-(--header) px-4 py-1.5">
         <h1 className="mr-auto text-[18px] font-bold text-white">
           Rekap Visite Multicentre{' '}
           <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">v2</span>
@@ -239,8 +239,8 @@ export default function App() {
           {busyCleanup ? 'Running…' : '🧹 Monthly Cleanup'}
         </button>
       </header>
-      {/* tight vertical rhythm: the table gets the space, not the gaps */}
-      <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col gap-2 px-4 py-2">
+      {/* minimal vertical rhythm: the table gets the space, not the gaps */}
+      <main className="mx-auto flex w-full min-h-0 max-w-[1920px] flex-1 flex-col gap-1 px-3 py-1">
         <div className="shrink-0">
           <TabBar tab={tab} onChange={setTab} counts={counts} />
         </div>
@@ -260,7 +260,7 @@ export default function App() {
           {!loading && !error && tab !== 'rekap' && (
             <div className="flex min-h-0 flex-1 flex-col">
               {tab !== 'archived' && (
-                <div className="mb-1.5 flex shrink-0 items-center gap-2">
+                <div className="mb-1 flex shrink-0 items-center gap-2">
                   <button
                     className={`rounded-lg px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors ${
                       asoCount > 0
@@ -276,7 +276,7 @@ export default function App() {
                 </div>
               )}
               {tab === 'archived' && (
-                <div className="mb-1.5 flex shrink-0 flex-wrap items-center gap-2 text-xs">
+                <div className="mb-1 flex shrink-0 flex-wrap items-center gap-2 text-xs">
                   <span className="text-(--text2)">Facility:</span>
                   <select
                     className="rounded border border-(--border) bg-white px-2 py-1 text-(--text)"
@@ -318,7 +318,7 @@ export default function App() {
                   notify={notify}
                 />
               </div>
-              <p className="mt-1 shrink-0 text-[11px] leading-tight text-(--text2)">
+              <p className="shrink-0 text-[11px] leading-tight text-(--text2)">
                 {title} — {shown.length} row(s)
               </p>
             </div>

@@ -64,7 +64,7 @@ export function UploadBar({ onUploaded, notify }: Props) {
   }
 
   return (
-    <div className="mb-2">
+    <div className="mb-1">
       <input
         ref={inputRef}
         id="file-input"
@@ -85,13 +85,13 @@ export function UploadBar({ onUploaded, notify }: Props) {
       />
       <label
         htmlFor="file-input"
-        className="inline-block cursor-pointer rounded bg-(--primary) px-3 py-1.5 text-sm font-medium text-white hover:bg-(--primary-hover)"
+        className="inline-block cursor-pointer rounded bg-(--primary) px-2.5 py-1 text-[13px] font-medium text-white hover:bg-(--primary-hover)"
       >
         {busy ? 'Loading…' : '📄 Load Excel Files'}
       </label>
       <label
         htmlFor="lab-input"
-        className={`ml-2 inline-block cursor-pointer rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 ${
+        className={`ml-2 inline-block cursor-pointer rounded bg-indigo-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-indigo-700 ${
           labBusy ? 'opacity-60' : ''
         }`}
       >
