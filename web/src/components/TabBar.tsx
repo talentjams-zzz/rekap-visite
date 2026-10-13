@@ -12,7 +12,7 @@ const label = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 // blue underline + blue text, hover = light blue.
 export function TabBar({ tab, onChange, counts }: Props) {
   const cls = (t: Tab) =>
-    `-mb-0.5 border-b-2 px-5 py-2.5 text-[13px] font-semibold transition-colors ${
+    `-mb-0.5 border-b-2 px-5 py-1.5 text-[13px] font-semibold transition-colors ${
       tab === t
         ? 'border-(--primary) text-(--primary)'
         : 'border-transparent text-(--text) hover:bg-(--row-hover)'

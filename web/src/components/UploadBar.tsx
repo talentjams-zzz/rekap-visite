@@ -64,7 +64,7 @@ export function UploadBar({ onUploaded, notify }: Props) {
   }
 
   return (
-    <div className="mb-3">
+    <div className="mb-2">
       <input
         ref={inputRef}
         id="file-input"
