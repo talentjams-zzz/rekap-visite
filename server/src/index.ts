@@ -13,7 +13,11 @@ import {
   type V1Master,
 } from './migrate.js';
 import { registerInteractions } from './interactions.js';
+import { labSummaryFrom, registerLabs } from './labs.js';
+import type { LabSummary } from './labs.js';
 import { registerUploads } from './uploads.js';
+import type { AsoMed } from './core/types.js';
+import type { LabTest } from './core/parsers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
@@ -30,6 +34,7 @@ const schemaSql = readFileSync(path.join(root, 'server', 'schema.sql'), 'utf8');
 const events = registerEvents(app);
 await app.register(fastifyMultipart, { limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
 registerUploads(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
+registerLabs(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
 registerInteractions(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
 
 function loadMaster(): V1Master | null {
@@ -106,11 +111,32 @@ interface RowDto {
   operan: string | null;
   terapi: string | null;
   pharmacistNote: string | null;
+  aso: AsoMed[];
+  lab: LabSummary | null;
   archived: boolean;
   archivedAt: string | null;
   lastSeen: string | null;
   dayCount: number;
   checklist: Record<string, string | null>;
+}
+
+function parseAso(raw: unknown): AsoMed[] {
+  try {
+    const v = JSON.parse(String(raw ?? '[]'));
+    return Array.isArray(v) ? (v as AsoMed[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** tests_json is always written by this server (JSON.stringify), but parse defensively anyway. */
+function parseLabTests(raw: unknown): LabTest[] | null {
+  try {
+    const v = JSON.parse(String(raw ?? '[]'));
+    return Array.isArray(v) ? (v as LabTest[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Patient rows for the UI. ?status=active|archived (default active), ?facility=nusin|... */
@@ -119,9 +145,10 @@ interface RowDto {
 // the statement through `?` parameters.
 const ROWS_SELECT = `SELECT p.id, p.mr, p.facility, p.date_added, p.tgl_registrasi, p.nama, p.umur,
        p.kamar, p.bed, p.dokter, p.diagnosis, p.operan, p.terapi,
-       p.pharmacist_note, p.archived, p.archived_at, p.last_seen,
+       p.pharmacist_note, p.aso_json, p.archived, p.archived_at, p.last_seen,
+       l.loaded_at AS lab_loaded_at, l.max_date AS lab_max_date, l.tests_json AS lab_tests_json,
        (SELECT COUNT(*) FROM patient_days d WHERE d.patient_id = p.id) AS day_count
-  FROM patients p WHERE `;
+  FROM patients p LEFT JOIN labs l ON l.mr = p.mr WHERE `;
 const W_FACILITY = 'p.facility = ? AND ';
 const W_ACTIVE = 'p.archived = 0';
 const W_ARCHIVED = 'p.archived = 1';
@@ -178,6 +205,14 @@ app.get('/api/rows', async (req) => {
       operan: (r.operan as string | null) ?? null,
       terapi: (r.terapi as string | null) ?? null,
       pharmacistNote: (r.pharmacist_note as string | null) ?? null,
+      aso: parseAso(r.aso_json),
+      lab: (() => {
+        if (!r.lab_tests_json) return null;
+        const tests = parseLabTests(r.lab_tests_json);
+        return tests
+          ? labSummaryFrom(tests, (r.lab_loaded_at as string | null) ?? null, String(r.lab_max_date ?? ''))
+          : null;
+      })(),
       archived: Number(r.archived) === 1,
       archivedAt: (r.archived_at as string | null) ?? null,
       lastSeen: (r.last_seen as string | null) ?? null,

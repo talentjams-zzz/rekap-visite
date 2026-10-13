@@ -9,14 +9,18 @@ import {
   type SortingState,
   type Table,
 } from '@tanstack/react-table';
-import { fetchHistory } from '../api';
+import { fetchHistory, fetchLab } from '../api';
 import {
   CHECKLIST_LABELS,
+  type AsoMed,
   type EditableKey,
   type HistoryEntry,
+  type LabReport,
   type RowDto,
 } from '../types';
+import { AsoCell } from './AsoCell';
 import { EditableCell } from './EditableCell';
+import { LabCell, LabPanel } from './LabCell';
 
 const col = createColumnHelper<RowDto>();
 
@@ -24,6 +28,7 @@ interface Handlers {
   onToggleCheck: (row: RowDto, key: string) => void;
   onEditField: (row: RowDto, key: EditableKey, value: string) => void;
   onToggleArchive: (row: RowDto) => void;
+  onAsoChange: (row: RowDto, aso: AsoMed[]) => void;
   notify: (msg: string, error?: boolean) => void;
 }
 
@@ -168,8 +173,9 @@ interface Props extends Handlers {
   showFacility?: boolean;
 }
 
-export function PatientTable({ rows, facility, showFacility = false, ...handlers }: Props) {
-  const storageKey = `rekap-col-widths-${showFacility ? 'archived' : facility}`;
+export function PatientTable({ rows, facility: _facility, showFacility = false, ...handlers }: Props) {
+  void _facility; // all facilities share the full column set (v1 COLS_SHORT === COLS_FULL)
+  const storageKey = `rekap-col-widths-${showFacility ? 'archived' : _facility}`;
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() => {
     try {
       return JSON.parse(localStorage.getItem(storageKey) || '{}') as ColumnSizingState;
@@ -181,6 +187,7 @@ export function PatientTable({ rows, facility, showFacility = false, ...handlers
     { id: 'tglRegistrasi', desc: true },
   ]);
   const [expanded, setExpanded] = useState<{ id: string; days: HistoryEntry[] | null } | null>(null);
+  const [labOpen, setLabOpen] = useState<{ mr: string; rep: LabReport | null } | null>(null);
 
   const toggleRiwayat = (row: RowDto) => {
     if (expanded?.id === row.id) {
@@ -196,12 +203,33 @@ export function PatientTable({ rows, facility, showFacility = false, ...handlers
       });
   };
 
+  const toggleLab = (row: RowDto) => {
+    if (labOpen?.mr === row.mr) {
+      setLabOpen(null);
+      return;
+    }
+    if (!row.lab) return;
+    setLabOpen({ mr: row.mr, rep: null });
+    fetchLab(row.mr)
+      .then((rep) => {
+        if (rep) setLabOpen({ mr: row.mr, rep });
+        else {
+          setLabOpen(null);
+          handlers.notify('No lab report found', true);
+        }
+      })
+      .catch(() => {
+        setLabOpen(null);
+        handlers.notify('Failed to load lab report', true);
+      });
+  };
+
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(columnSizing));
   }, [columnSizing, storageKey]);
 
-  const full = facility === 'nusin';
-
+  // v1 (frozen): ALL facilities show the full column set (COLS_SHORT ===
+  // COLS_FULL) — Diagnosis/Operan/Terapi are editable on every facility.
   const columns = useMemo(() => {
     return [
       col.accessor((r) => r.tglRegistrasi,
@@ -216,43 +244,59 @@ export function PatientTable({ rows, facility, showFacility = false, ...handlers
       col.accessor((r) => r.kamar, { id: 'kamar', header: 'Kamar', size: 80 }),
       col.accessor((r) => r.bed, { id: 'bed', header: 'Bed', size: 50 }),
       col.accessor((r) => r.dokter, { id: 'dokter', header: 'Dokter', size: 130 }),
-      ...(full
-        ? [
-            col.accessor((r) => r.diagnosis, {
-              id: 'diagnosis',
-              header: 'Diagnosis',
-              size: 150,
-              cell: (info) => (
-                <EditableCell
-                  value={info.getValue()}
-                  onSave={(v) => handlers.onEditField(info.row.original, 'diagnosis', v)}
-                />
-              ),
-            }),
-            col.accessor((r) => r.operan, {
-              id: 'operan',
-              header: 'Operan',
-              size: 150,
-              cell: (info) => (
-                <EditableCell
-                  value={info.getValue()}
-                  onSave={(v) => handlers.onEditField(info.row.original, 'operan', v)}
-                />
-              ),
-            }),
-            col.accessor((r) => r.terapi, {
-              id: 'terapi',
-              header: 'Terapi',
-              size: 150,
-              cell: (info) => (
-                <EditableCell
-                  value={info.getValue()}
-                  onSave={(v) => handlers.onEditField(info.row.original, 'terapi', v)}
-                />
-              ),
-            }),
-          ]
-        : []),
+      col.accessor((r) => r.diagnosis, {
+        id: 'diagnosis',
+        header: 'Diagnosis',
+        size: 150,
+        cell: (info) => (
+          <EditableCell
+            value={info.getValue()}
+            onSave={(v) => handlers.onEditField(info.row.original, 'diagnosis', v)}
+          />
+        ),
+      }),
+      col.accessor((r) => r.operan, {
+        id: 'operan',
+        header: 'Operan',
+        size: 150,
+        cell: (info) => (
+          <EditableCell
+            value={info.getValue()}
+            onSave={(v) => handlers.onEditField(info.row.original, 'operan', v)}
+          />
+        ),
+      }),
+      col.accessor((r) => r.terapi, {
+        id: 'terapi',
+        header: 'Terapi',
+        size: 150,
+        cell: (info) => (
+          <EditableCell
+            value={info.getValue()}
+            onSave={(v) => handlers.onEditField(info.row.original, 'terapi', v)}
+          />
+        ),
+      }),
+      col.display({
+        id: 'hasilLab',
+        header: 'Hasil Lab',
+        size: 180,
+        cell: (info) => (
+          <LabCell
+            row={info.row.original}
+            open={labOpen?.mr === info.row.original.mr}
+            onToggle={toggleLab}
+          />
+        ),
+      }),
+      col.display({
+        id: 'aso',
+        header: 'ASO',
+        size: 180,
+        cell: (info) => (
+          <AsoCell row={info.row.original} onChange={handlers.onAsoChange} />
+        ),
+      }),
       col.display({
         id: 'riwayat',
         header: 'Riwayat',
@@ -301,7 +345,7 @@ export function PatientTable({ rows, facility, showFacility = false, ...handlers
       }),
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facility, showFacility, expanded?.id, handlers.onToggleCheck, handlers.onEditField, handlers.onToggleArchive, handlers.notify]);
+  }, [showFacility, expanded?.id, labOpen?.mr, handlers.onToggleCheck, handlers.onEditField, handlers.onToggleArchive, handlers.onAsoChange, handlers.notify]);
 
   const table = useReactTable({
     data: rows,
@@ -338,6 +382,17 @@ export function PatientTable({ rows, facility, showFacility = false, ...handlers
                       <RiwayatTable days={expanded.days} />
                     ) : (
                       <div className="text-xs text-zinc-400">Loading…</div>
+                    )}
+                  </td>
+                </tr>
+              )}
+              {labOpen?.mr === row.original.mr && row.original.lab && (
+                <tr className="bg-slate-50">
+                  <td colSpan={columns.length} className="p-2">
+                    {labOpen.rep ? (
+                      <LabPanel row={row.original} rep={labOpen.rep} notify={handlers.notify} />
+                    ) : (
+                      <div className="text-xs text-zinc-400">Loading lab…</div>
                     )}
                   </td>
                 </tr>

@@ -80,6 +80,7 @@ export function loadWorldState(db: DatabaseSync): WorldState {
         ...rcBy.get(id),
       },
       pharmacistNote: (r.pharmacist_note as string) ?? '',
+      aso: parseAsoJson(r.aso_json),
       archived: Number(r.archived) === 1,
       archivedAt: (r.archived_at as string) ?? null,
       telaahLog: rl['telaah_resep'] ?? [],
@@ -95,6 +96,15 @@ export function loadWorldState(db: DatabaseSync): WorldState {
   };
 }
 
+function parseAsoJson(raw: unknown): import('./core/types.js').AsoMed[] {
+  try {
+    const v = JSON.parse(String(raw ?? '[]'));
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Full write-back of the world state (idempotent). At this app's scale
  * (hundreds of rows) a full upsert is simpler and safer than diffing.
@@ -104,8 +114,8 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
   try {
     const insP = db.prepare(`
       INSERT INTO patients (id, mr, facility, date_added, tgl_registrasi, nama, umur, kamar, bed,
-                            dokter, diagnosis, operan, terapi, pharmacist_note, archived, archived_at, last_seen)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            dokter, diagnosis, operan, terapi, pharmacist_note, aso_json, archived, archived_at, last_seen)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         date_added = excluded.date_added,
         tgl_registrasi = excluded.tgl_registrasi,
@@ -126,7 +136,7 @@ export function saveWorldState(db: DatabaseSync, state: WorldState): void {
         r.id, r.mr, r.facility, r.dateAdded || null, r.tglRegistrasi || null,
         r.nama || null, r.umur || null, r.kamar || null, r.bed || null,
         r.dokter || null, r.diagnosis || null, r.operan || null, r.terapi || null,
-        r.pharmacistNote || null, r.archived ? 1 : 0, r.archivedAt, r.lastSeen,
+        r.pharmacistNote || null, JSON.stringify(r.aso ?? []), r.archived ? 1 : 0, r.archivedAt, r.lastSeen,
       );
     }
 

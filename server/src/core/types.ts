@@ -39,6 +39,15 @@ export interface LogEntry {
 }
 
 /** One patient per facility — mirrors the v1 row shape (latest day's fields). */
+/** ASO = "obat yang harus berhenti" (med to stop). v1 row.aso list item. */
+export interface AsoMed {
+  id: string;
+  name: string;
+  stopDate: string; // YYYY-MM-DD
+  stopped: boolean;
+  stoppedAt: string | null;
+}
+
 export interface PatientRow {
   id: string; // "{mr}_{facility}"
   mr: string;
@@ -56,6 +65,7 @@ export interface PatientRow {
   terapi: string;
   checklist: Record<RowChecklistItem, string | null>;
   pharmacistNote: string;
+  aso: AsoMed[];
   archived: boolean;
   archivedAt: string | null;
   telaahLog: LogEntry[];

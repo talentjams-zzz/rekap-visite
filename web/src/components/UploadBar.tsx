@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { uploadLab } from '../api';
 
 interface Props {
   onUploaded: () => void;
@@ -7,7 +8,9 @@ interface Props {
 
 export function UploadBar({ onUploaded, notify }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const labRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [labBusy, setLabBusy] = useState(false);
 
   async function handle(files: FileList | null) {
     if (!files?.length) return;
@@ -43,6 +46,23 @@ export function UploadBar({ onUploaded, notify }: Props) {
     }
   }
 
+  async function handleLab(files: FileList | null) {
+    if (!files?.length) return;
+    setLabBusy(true);
+    try {
+      const j = await uploadLab(Array.from(files));
+      let msg = `Loaded ${j.loaded} lab report(s)`;
+      if (j.skipped.length) msg += ` · skipped: ${j.skipped.join(', ')}`;
+      notify(msg, j.skipped.length > 0);
+      onUploaded();
+    } catch (e) {
+      notify(`Lab upload failed: ${(e as Error).message}`, true);
+    } finally {
+      setLabBusy(false);
+      if (labRef.current) labRef.current.value = '';
+    }
+  }
+
   return (
     <div className="mb-3">
       <input
@@ -54,14 +74,31 @@ export function UploadBar({ onUploaded, notify }: Props) {
         className="hidden"
         onChange={(e) => handle(e.target.files)}
       />
+      <input
+        ref={labRef}
+        id="lab-input"
+        type="file"
+        accept=".xlsx,.xls"
+        multiple
+        className="hidden"
+        onChange={(e) => handleLab(e.target.files)}
+      />
       <label
         htmlFor="file-input"
         className="inline-block cursor-pointer rounded bg-teal-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-700"
       >
         {busy ? 'Loading…' : '📄 Load Excel Files'}
       </label>
+      <label
+        htmlFor="lab-input"
+        className={`ml-2 inline-block cursor-pointer rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 ${
+          labBusy ? 'opacity-60' : ''
+        }`}
+      >
+        {labBusy ? 'Loading…' : '🧪 Load Lab Files'}
+      </label>
       <span className="ml-2 text-xs text-zinc-400">
-        registry: nusin/melati/sakura/observasi DD-M-YY.xlsx · handover: operan nusin DD-M-YY.xlsx
+        registry: nusin/melati/sakura/observasi DD-M-YY.xlsx · handover: operan nusin DD-M-YY.xlsx · lab: lab-{'{'}MR{'}'}.xlsx
       </span>
     </div>
   );

@@ -39,9 +39,17 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       the current day's riwayat snapshot — v1 manual-riwayat regression),
       archive/restore, riwayat expand (inline past-days table, fetched on
       demand). Verified: UI round-trip + DB persistence (incl. snapshot).
-- [ ] **P6 — Lab**: per-MR lab upload, findings table with section headers +
-      abnormal/kritis highlighting + komentar, copy-to-clipboard, ASO
-      stop-date warnings + "ASO ⚠" filter, archived rows read-only.
+- [x] **P6 — Lab**: per-MR lab upload (lab-{MR}.xlsx, latest wins →
+      `POST /api/uploads/lab`), lab summary cell (date + abnormal/kritis
+      counts, ⚠ Lab Kritis badge), expandable findings table (Jenis section
+      headers, abnormal red, kritis red+LK, Abnormal/Kritis filter bar, copy
+      visible tests to clipboard), `GET /api/patients/:mr/lab`. **ASO** (meds
+      to stop): migration now preserves `row.aso` (was being dropped — 22 real
+      rows), ASO cell (add/name/date/✓stop/×, due = red), top "⚠️ ASO Alert : N
+      meds" banner, per-facility "ASO ⚠" row filter, archived read-only.
+      Verified: banner 23 = v1 computation, upload round-trip replaced MR
+      report, ASO med persisted. Faithfulness fix: all facilities get the full
+      column set (v1 COLS_SHORT === COLS_FULL).
 - [ ] **P7 — Rekap + Archived filters**: rekap checklist aggregates; archived
       tab facility column + facility dropdown + date-range filter.
 - [ ] **P8 — E2E port**: v1 `test_*.py` → TypeScript Playwright in

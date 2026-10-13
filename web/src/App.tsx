@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchRows, patchRow, postPatientCheck, postRowCheck } from './api';
+import { fetchRows, patchAso, patchRow, postPatientCheck, postRowCheck } from './api';
 import { PatientTable } from './components/PatientTable';
 import { TabBar } from './components/TabBar';
 import { UploadBar } from './components/UploadBar';
 import {
+  asoDueCount,
   FACILITIES,
   nowTs,
   ROW_ITEM_KEYS,
+  type AsoMed,
   type EditableKey,
   type RowDto,
   type Tab,
@@ -25,6 +27,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [asoFilter, setAsoFilter] = useState(false);
 
   const notify = useCallback((msg: string, isError = false) => {
     const id = Date.now() + Math.random();
@@ -109,13 +112,30 @@ export default function App() {
     [notify, reload, updateLocal],
   );
 
+  const handleAsoChange = useCallback(
+    (row: RowDto, aso: AsoMed[]) => {
+      updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, aso } : r)));
+      patchAso(row.id, aso).catch((e: Error) => {
+        notify(`ASO save failed: ${e.message}`, true);
+        reload();
+      });
+    },
+    [notify, reload, updateLocal],
+  );
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { archived: archived.length };
     for (const f of FACILITIES) c[f] = active.filter((r) => r.facility === f).length;
     return c;
   }, [active, archived]);
 
-  const shown = tab === 'archived' ? archived : active.filter((r) => r.facility === tab);
+  const shown =
+    tab === 'archived'
+      ? archived
+      : active.filter((r) => r.facility === tab && (!asoFilter || asoDueCount(r) > 0));
+
+  // v1 updateAsoAlertBanner: meds due to stop across ALL active patients.
+  const asoTotal = useMemo(() => active.reduce((n, r) => n + asoDueCount(r), 0), [active]);
   const title =
     tab === 'archived' ? 'Archived' : tab === 'rekap' ? 'Rekap Checklist' : tab.charAt(0).toUpperCase() + tab.slice(1);
 
@@ -126,6 +146,11 @@ export default function App() {
           Rekap Visite <span className="text-xs font-normal text-zinc-400">v2</span>
         </h1>
       </header>
+      {asoTotal > 0 && (
+        <div className="flex items-center gap-2 bg-red-600 px-4 py-1.5 text-sm font-bold text-white">
+          ⚠️ ASO Alert : {asoTotal} {asoTotal === 1 ? 'med' : 'meds'}
+        </div>
+      )}
       <main className="mx-auto max-w-[1920px] p-4">
         <TabBar tab={tab} onChange={setTab} counts={counts} />
         <div className="mt-3">
@@ -139,6 +164,20 @@ export default function App() {
           )}
           {!loading && !error && tab !== 'rekap' && (
             <>
+              {tab !== 'archived' && (
+                <div className="mb-2 flex items-center gap-2">
+                  <button
+                    className={`rounded border px-2 py-0.5 text-xs ${
+                      asoFilter
+                        ? 'border-red-600 bg-red-600 text-white'
+                        : 'border-zinc-300 bg-white hover:bg-zinc-50'
+                    }`}
+                    onClick={() => setAsoFilter(!asoFilter)}
+                  >
+                    ASO ⚠ ({active.filter((r) => r.facility === tab && asoDueCount(r) > 0).length})
+                  </button>
+                </div>
+              )}
               <PatientTable
                 rows={shown}
                 facility={tab === 'archived' ? 'all' : tab}
@@ -146,6 +185,7 @@ export default function App() {
                 onToggleCheck={handleToggleCheck}
                 onEditField={handleEditField}
                 onToggleArchive={handleToggleArchive}
+                onAsoChange={handleAsoChange}
                 notify={notify}
               />
               <p className="mt-2 text-xs text-zinc-400">

@@ -1,4 +1,4 @@
-import type { HistoryEntry, RowDto } from './types';
+import type { AsoMed, HistoryEntry, LabReport, RowDto } from './types';
 
 export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]> {
   const r = await fetch(`/api/rows?status=${status}`);
@@ -46,4 +46,33 @@ export async function fetchHistory(id: string): Promise<HistoryEntry[]> {
   const r = await fetch(`/api/rows/${encodeURIComponent(id)}/history`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return (await r.json()) as HistoryEntry[];
+}
+
+/** Full lab report for an MR (fetched when the lab panel expands). */
+export async function fetchLab(mr: string): Promise<LabReport | null> {
+  const r = await fetch(`/api/patients/${encodeURIComponent(mr)}/lab`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.json()) as LabReport;
+}
+
+/** Replace a row's ASO (meds-to-stop) list. */
+export async function patchAso(id: string, aso: AsoMed[]): Promise<void> {
+  const r = await fetch(`/api/rows/${encodeURIComponent(id)}/aso`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ aso }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
+/** Lab uploads: one or more lab-{MR}.xlsx files (latest per MR wins). */
+export async function uploadLab(
+  files: File[],
+): Promise<{ ok: boolean; loaded: number; skipped: string[] }> {
+  const fd = new FormData();
+  for (const f of files) fd.append('files', f);
+  const r = await fetch('/api/uploads/lab', { method: 'POST', body: fd });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.json()) as { ok: boolean; loaded: number; skipped: string[] };
 }

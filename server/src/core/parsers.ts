@@ -39,6 +39,7 @@ export function newPatientRow(
     terapi: '',
     checklist: { telaah_resep: null, catatan_pengobatan: null, pio: null },
     pharmacistNote: '',
+    aso: [],
     archived: false,
     archivedAt: null,
     telaahLog: [],

@@ -3,6 +3,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseSync } from 'node:sqlite';
 
+// SAFETY: the only column name interpolated into the ASO update below.
+const ASO_SQL = 'UPDATE patients SET aso_json = ? WHERE id = ?';
 const ROW_ITEM_KEYS = ['telaah_resep', 'catatan_pengobatan', 'pio'];
 const PATIENT_ITEM_KEYS = ['visite', 'pto', 'konseling', 'rekonsiliasi_obat', 'penelusuran_obat'];
 // SAFETY: the only column names ever interpolated into UPDATE/INSERT below;
@@ -42,6 +44,32 @@ export function registerInteractions(
   broadcast: () => void,
 ): void {
   // Row-level checklist (3 items).
+  // Replace a row's ASO (meds-to-stop) list.
+  app.patch('/api/rows/:id/aso', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { aso?: unknown };
+    if (!Array.isArray(body.aso)) {
+      reply.code(400);
+      return { ok: false, error: 'aso must be an array' };
+    }
+    const aso = body.aso.map((m, i) => {
+      const x = (m ?? {}) as Record<string, unknown>;
+      return {
+        id: typeof x.id === 'string' ? x.id : `${Date.now()}_${i}`,
+        name: typeof x.name === 'string' ? x.name : '',
+        stopDate: typeof x.stopDate === 'string' ? x.stopDate : '',
+        stopped: Boolean(x.stopped),
+        stoppedAt: typeof x.stoppedAt === 'string' ? x.stoppedAt : null,
+      };
+    });
+    const res = db.prepare(ASO_SQL).run(JSON.stringify(aso), id);
+    if (res.changes === 0) {
+      reply.code(404);
+      return { ok: false, error: 'row not found' };
+    }
+    return { ok: true };
+  });
+
   app.post('/api/rows/:id/check', async (req, reply) => {
     const { id } = req.params as { id: string };
     const { key, value } = req.body as { key?: string; value?: string | null };

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS patients (
   operan           TEXT,
   terapi           TEXT,
   pharmacist_note  TEXT,
+  aso_json         TEXT NOT NULL DEFAULT '[]',  -- [{id,name,stopDate,stopped,stoppedAt}] (v1 row.aso)
   archived         INTEGER NOT NULL DEFAULT 0,
   archived_at      TEXT,
   last_seen        TEXT,
