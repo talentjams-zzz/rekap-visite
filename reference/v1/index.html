@@ -1,0 +1,2327 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rekap Visite Multicentre</title>
+<script src="xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f5f5f5; --card: #fff; --border: #ddd; --text: #222; --text2: #555;
+  --primary: #2563eb; --primary-hover: #1d4ed8; --danger: #dc2626; --danger-hover: #b91c1c;
+  --success: #16a34a; --success-hover: #15803d; --archive-bg: #fef2f2;
+  --row-hover: #f0f7ff; --check-done: #dcfce7; --header: #1e293b; --header-text: #fff;
+}
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
+
+/* Top bar */
+.topbar { background: var(--header); color: var(--header-text); padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }
+.topbar h1 { font-size: 18px; font-weight: 700; margin-right: auto; }
+.topbar button { padding: 6px 14px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; transition: background 0.15s; }
+.topbar button:hover { background: rgba(255,255,255,0.25); }
+.topbar .badge { font-size: 11px; background: rgba(255,255,255,0.15); padding: 3px 10px; border-radius: 12px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); background: var(--card); overflow-x: auto; }
+.tab { padding: 10px 20px; cursor: pointer; font-weight: 600; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; user-select: none; white-space: nowrap; }
+.tab:hover { background: #f0f7ff; }
+.tab.active { border-bottom-color: var(--primary); color: var(--primary); }
+
+/* Table */
+.table-wrap { overflow-x: auto; padding: 0 16px 16px; }
+table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 12px; min-width: 1100px; }
+table.main-table { table-layout: fixed; }
+thead { position: sticky; top: 0; z-index: 10; }
+th { background: #334155; color: var(--header-text); padding: 8px 6px; text-align: left; white-space: nowrap; cursor: pointer; user-select: none; font-size: 11px; border-right: 1px solid rgba(255,255,255,0.1); position: relative; }
+th:hover { background: #475569; }
+th .sort-arrow { margin-left: 4px; font-size: 10px; }
+.col-resize { position: absolute; right: 0; top: 0; width: 6px; height: 100%; cursor: col-resize; z-index: 11; }
+.col-resize:hover { background: rgba(255,255,255,0.35); }
+td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:hover td { background: var(--row-hover); }
+td.mr-col { font-weight: 600; white-space: nowrap; }
+td.name-col { font-weight: 600; min-width: 160px; }
+td.diag-col, td.operan-col, td.terapi-col { white-space: pre-wrap; font-size: 11px; }
+.tglreg-time { font-size: 10px; color: var(--text2); margin-top: 1px; }
+
+/* Checklist */
+.checklist-cell { min-width: 280px; }
+.cl-item { display: flex; align-items: center; gap: 4px; padding: 1px 0; }
+.cl-item label { font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.cl-item input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--primary); }
+.cl-item.done { color: var(--success); }
+.cl-timestamp { font-size: 10px; color: var(--success); margin-left: 2px; white-space: nowrap; }
+
+/* Editable text cells (Diagnosis / Operan / Terapi / Pharmacist Note) —
+   plain text by default (full content, no box); click to edit in place */
+.edit-cell { cursor: text; }
+.edit-cell .edit-text { white-space: pre-wrap; word-break: break-word; }
+.edit-cell .edit-text.empty { color: var(--text2); font-style: italic; }
+.edit-cell:hover { background: rgba(37, 99, 235, 0.07); }
+.edit-cell .edit-input { width: 100%; min-height: 64px; border: 1px solid var(--primary); border-radius: 4px; padding: 4px 6px; font-size: 11px; font-family: inherit; resize: vertical; }
+.edit-cell .edit-input:focus { outline: none; }
+
+/* Actions */
+.actions-cell { white-space: nowrap; }
+.btn-archive { padding: 3px 8px; font-size: 11px; border: 1px solid var(--danger); background: #fef2f2; color: var(--danger); border-radius: 4px; cursor: pointer; }
+.btn-archive:hover { background: var(--danger); color: #fff; }
+.btn-unarchive { padding: 3px 8px; font-size: 11px; border: 1px solid var(--success); background: #f0fdf4; color: var(--success); border-radius: 4px; cursor: pointer; }
+.btn-unarchive:hover { background: var(--success); color: #fff; }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+.empty-state h2 { margin-bottom: 8px; font-size: 18px; }
+.empty-state p { margin-bottom: 16px; }
+.empty-state button { padding: 8px 20px; background: var(--primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+/* Date badge */
+.date-badge { display: inline-block; background: #e0e7ff; color: var(--primary); font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; }
+.facility-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 600; color: #fff; }
+.facility-badge.nusin { background: #2563eb; }
+.facility-badge.melati { background: #16a34a; }
+.facility-badge.sakura { background: #d946ef; }
+.facility-badge.observasi { background: #ea580c; }
+
+/* Search */
+.search-wrap { position: relative; }
+.search-input { padding: 6px 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; border-radius: 6px; font-size: 12px; width: 220px; }
+.search-input::placeholder { color: rgba(255,255,255,0.5); }
+.search-input:focus { outline: none; border-color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.15); }
+.search-count { font-size: 11px; background: rgba(255,255,255,0.15); padding: 3px 10px; border-radius: 12px; }
+
+/* Rekap table */
+.rekap-wrap { padding: 16px; }
+.rekap-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.rekap-card h3 { font-size: 14px; margin-bottom: 8px; color: var(--primary); }
+.rekap-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+.rekap-row:last-child { border-bottom: none; }
+.rekap-date { font-weight: 700; font-size: 12px; min-width: 100px; white-space: nowrap; }
+.rekap-count { font-weight: 600; color: var(--success); font-size: 12px; min-width: 60px; }
+.rekap-mrs { display: flex; flex-wrap: wrap; gap: 4px; }
+.rekap-mr-tag { background: #e0e7ff; color: var(--primary); font-size: 10px; padding: 2px 8px; border-radius: 10px; cursor: pointer; white-space: nowrap; }
+.rekap-mr-tag:hover { background: var(--primary); color: #fff; }
+.rekap-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.rekap-stat { background: #f0f7ff; border-radius: 8px; padding: 12px; text-align: center; }
+.rekap-stat .num { font-size: 28px; font-weight: 700; color: var(--primary); }
+.rekap-stat .label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: 6px; padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+.filter-label { font-size: 11px; font-weight: 600; color: var(--text2); margin-right: 4px; }
+.filter-btn { padding: 3px 10px; font-size: 11px; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 12px; cursor: pointer; transition: all 0.15s; }
+.filter-btn:hover { background: #f0f7ff; border-color: var(--primary); }
+.filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.filter-btn .count { font-size: 10px; margin-left: 2px; opacity: 0.7; }
+.filter-select { padding: 3px 8px; font-size: 11px; border: 1px solid var(--border); border-radius: 12px; background: #fff; cursor: pointer; }
+.filter-date { padding: 3px 8px; font-size: 11px; border: 1px solid var(--border); border-radius: 12px; }
+
+/* Copy button */
+.btn-copy { padding: 2px 8px; font-size: 10px; border: 1px solid var(--border); background: #f9fafb; color: var(--text2); border-radius: 4px; cursor: pointer; margin-left: 4px; }
+.btn-copy:hover { background: #e0e7ff; border-color: var(--primary); color: var(--primary); }
+
+/* Daily history (Riwayat) */
+.btn-history { padding: 2px 8px; font-size: 10px; border: 1px solid var(--primary); background: #eef2ff; color: var(--primary); border-radius: 4px; cursor: pointer; margin-left: 6px; white-space: nowrap; }
+.btn-history:hover { background: var(--primary); color: #fff; }
+tr.history-row td { background: #f8fafc; border-bottom: 2px solid var(--border); padding: 8px 12px; }
+.history-wrap { font-size: 11px; }
+.history-title { font-weight: 700; color: var(--primary); margin-bottom: 6px; font-size: 12px; }
+.history-table { width: 100%; border-collapse: collapse; background: #fff; font-size: 11px; }
+.history-table th { background: #475569; color: #fff; padding: 5px 8px; text-align: left; font-size: 10px; cursor: default; white-space: nowrap; }
+.history-table th:hover { background: #475569; }
+.history-table td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.history-table .h-date { font-weight: 700; white-space: nowrap; color: var(--primary); }
+.history-table .h-clin { max-width: 220px; white-space: pre-wrap; font-size: 10px; }
+
+/* Hasil Lab column */
+.lab-cell { min-width: 180px; }
+.lab-empty { color: var(--text2); font-style: italic; }
+.lab-kritis-badge { display: inline-block; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 8px; margin-bottom: 3px; }
+.lab-summary-line { font-size: 11px; margin-bottom: 3px; }
+.lab-date { font-weight: 700; color: var(--primary); }
+.lab-count { color: var(--text2); font-size: 10px; }
+.lab-kritis-text { color: var(--danger); font-weight: 700; }
+.btn-lab { padding: 2px 8px; font-size: 10px; border: 1px solid var(--primary); background: #eef2ff; color: var(--primary); border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.btn-lab:hover { background: var(--primary); color: #fff; }
+tr.lab-row td { background: #f8fafc; border-bottom: 2px solid var(--border); padding: 8px 12px; }
+.lab-wrap { font-size: 11px; overflow-x: auto; }
+.lab-title { font-weight: 700; color: var(--primary); margin-bottom: 6px; font-size: 12px; }
+.lab-table { width: 100%; border-collapse: collapse; background: #fff; font-size: 11px; }
+.lab-table th { background: #475569; color: #fff; padding: 5px 8px; text-align: left; font-size: 10px; white-space: nowrap; }
+.lab-table td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.lab-val { font-weight: 600; }
+.lab-abnormal { color: var(--danger); }
+.lab-kritis-val { color: var(--danger); font-weight: 700; }
+.lab-lk { color: var(--danger); font-weight: 700; font-size: 10px; margin-left: 3px; }
+tr.lab-row-abnormal td { background: #fef2f2; }
+tr.lab-row-kritis td { background: #fee2e2; }
+.lab-ket { max-width: 260px; white-space: pre-wrap; font-size: 10px; }
+.lab-komentar { white-space: pre-wrap; font-size: 10px; color: #334155; }
+.lab-tgl { white-space: nowrap; font-size: 10px; }
+.lab-filter-bar { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.lab-section-row td { background: #e2e8f0; font-weight: 700; color: #334155; padding: 4px 8px; font-size: 11px; border-bottom: 1px solid #cbd5e1; }
+/* ASO column (meds to stop) */
+.aso-cell { min-width: 180px; }
+.aso-empty { color: var(--text2); font-style: italic; }
+.aso-due-badge { display: inline-block; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 8px; margin-bottom: 3px; }
+.aso-item { padding: 3px 0; border-bottom: 1px solid #f0f0f0; }
+.aso-item:last-of-type { border-bottom: none; }
+.aso-item.due { background: #fef2f2; }
+.aso-item.due .aso-name { color: var(--danger); font-weight: 700; }
+.aso-name { width: 100%; border: 1px solid transparent; border-radius: 3px; padding: 1px 3px; font-size: 11px; font-family: inherit; background: transparent; }
+.aso-name:focus { outline: none; border-color: var(--primary); background: #fff; }
+.aso-row2 { display: flex; align-items: center; gap: 3px; margin-top: 2px; }
+.aso-date { border: 1px solid var(--border); border-radius: 3px; padding: 1px 2px; font-size: 10px; font-family: inherit; }
+.aso-date:focus { outline: none; border-color: var(--primary); }
+.aso-stop { padding: 1px 6px; font-size: 10px; border: 1px solid var(--border); background: #fff; color: var(--text2); border-radius: 3px; cursor: pointer; white-space: nowrap; }
+.aso-stop:hover { border-color: var(--success); color: var(--success); }
+.aso-stop.stopped { background: var(--success); border-color: var(--success); color: #fff; }
+.aso-del { padding: 1px 5px; font-size: 11px; border: none; background: transparent; color: var(--text2); cursor: pointer; border-radius: 3px; }
+.aso-del:hover { color: var(--danger); background: #fef2f2; }
+.aso-add { margin-top: 3px; padding: 2px 8px; font-size: 10px; border: 1px dashed var(--border); background: #fff; color: var(--text2); border-radius: 4px; cursor: pointer; }
+.aso-add:hover { border-color: var(--primary); color: var(--primary); }
+
+
+/* Toast */
+.toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; z-index: 999; transition: opacity 0.3s; }
+.toast.hide { opacity: 0; pointer-events: none; }
+
+/* Reconnect banner (master file handle lost) */
+.reconnect-banner { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #fef3c7; color: #92400e; border-bottom: 1px solid #fcd34d; font-size: 12px; }
+.reconnect-banner button { padding: 5px 12px; background: var(--primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+
+/* ASO due-alert banner — top of page, red, shown whenever any active
+   patient still has a med due to stop */
+.aso-alert-banner { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--danger); color: #fff; font-size: 13px; font-weight: 700; border-bottom: 2px solid var(--danger-hover); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .topbar { padding: 8px 12px; gap: 8px; }
+  .topbar h1 { font-size: 15px; }
+  .topbar button { padding: 5px 10px; font-size: 11px; }
+  .table-wrap { padding: 0 8px 8px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Rekap Visite Multicentre</h1>
+  <button onclick="openMasterData()">📂 Open Master Data</button>
+  <button onclick="loadExcel()">📄 Load Excel Files</button>
+  <button onclick="loadLab()">🧪 Load Lab Results</button>
+  <button onclick="saveAllData()">💾 Save All Data</button>
+  <button onclick="exportSnapshot()" title="Write an extra timestamped backup copy (rekap-visite-master-….json) without changing the bound file">📦 Export Snapshot</button>
+  <button id="cleanupBtn" onclick="runMonthlyCleanup()" title="Monthly job: back up ALL data, then remove archived patients. Runs automatically on the 1st of each month at 00:05 — this runs it now.">🧹 Monthly Cleanup</button>
+  <span class="badge" id="archiveBadge">Archived: 0</span>
+  <span class="badge" id="cleanupBadge" style="display:none;"></span>
+  <span class="badge" id="lastSavedBadge" title="Last time the data was saved to the master file">💾 Not saved yet</span>
+  <span class="badge" id="connBadge" style="display:none;">🟢 Server</span>
+  <div class="search-wrap">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search MR or patient name..." oninput="handleSearch()">
+    <span class="search-count" id="searchCount"></span>
+  </div>
+</div>
+
+<!-- Top-of-page alert: meds due to stop (ASO). Red, shown whenever > 0. -->
+<div id="asoAlertBanner" class="aso-alert-banner" style="display:none;"></div>
+
+<div class="tabs" id="tabBar"></div>
+
+<!-- Shown when the saved master file handle is lost (e.g. file moved/renamed) -->
+<div id="reconnectBanner" class="reconnect-banner" style="display:none;">
+  <span>⚠️ Master data file not found at its last location — saving will ask you to pick it again.</span>
+  <button onclick="openMasterData()">Reconnect master file</button>
+</div>
+
+<!-- Server mode: shown on a save conflict, or when new data arrives while you have unsaved edits -->
+<div id="syncBanner" class="reconnect-banner" style="display:none;">
+  <span id="syncBannerMsg"></span>
+  <button id="syncBannerA"></button>
+  <button id="syncBannerB"></button>
+</div>
+
+<!-- Filter bar for facility tabs (checklist filter) -->
+<div id="filterBar" class="filter-bar" style="display:none;">
+  <span class="filter-label">Filter undone:</span>
+  <button class="filter-btn" id="filterBtnTR" onclick="toggleFilter('telaah_resep')">Telaah Resep</button>
+  <button class="filter-btn" id="filterBtnCP" onclick="toggleFilter('catatan_pengobatan')">Catatan Pengobatan</button>
+  <button class="filter-btn" id="filterBtnPO" onclick="toggleFilter('penelusuran_obat')">Penelusuran Obat</button>
+  <button class="filter-btn" id="filterBtnRO" onclick="toggleFilter('rekonsiliasi_obat')">Rekonsiliasi Obat</button>
+  <button class="filter-btn" id="filterBtnV" onclick="toggleFilter('visite')">Visite</button>
+  <button class="filter-btn" id="filterBtnPTO" onclick="toggleFilter('pto')">PTO</button>
+  <button class="filter-btn" id="filterBtnK" onclick="toggleFilter('konseling')">Konseling</button>
+  <button class="filter-btn" id="filterBtnPIO" onclick="toggleFilter('pio')">PIO</button>
+  <button class="filter-btn" id="filterBtnASO" onclick="toggleFilter('aso')">ASO ⚠</button>
+</div>
+
+<!-- Filter bar for archived tab (facility + date range) -->
+<div id="archiveFilterBar" class="filter-bar" style="display:none;">
+  <span class="filter-label">Facility:</span>
+  <select class="filter-select" id="archiveFacilityFilter" onchange="render()">
+    <option value="all">All</option>
+    <option value="nusin">Nusin</option>
+    <option value="melati">Melati</option>
+    <option value="sakura">Sakura</option>
+    <option value="observasi">Observasi</option>
+  </select>
+  <span class="filter-label" style="margin-left:12px;">Date from:</span>
+  <input type="date" class="filter-date" id="archiveDateFrom" onchange="render()">
+  <span class="filter-label">to:</span>
+  <input type="date" class="filter-date" id="archiveDateTo" onchange="render()">
+</div>
+
+<div id="mainContent">
+  <div class="empty-state" id="emptyState">
+    <h2>No Data Loaded</h2>
+    <p>Click "Open Master Data" to load your saved data, or "Load Excel Files" to add new patient data.</p>
+  </div>
+  <div class="table-wrap" id="tableWrap" style="display:none;"></div>
+</div>
+
+<input type="file" id="masterInput" accept=".json" style="display:none" onchange="handleMasterLoad(event)">
+<input type="file" id="excelInput" accept=".xlsx,.xls" multiple style="display:none" onchange="handleExcelLoad(event)">
+<input type="file" id="labInput" accept=".xlsx,.xls" multiple style="display:none" onchange="handleLabLoad(event)">
+
+<div class="toast hide" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+let rows = [];
+let patientChecklist = {}; // { mr: { penelusuran_obat: ts, ... } }
+let currentTab = 'nusin';
+let sortCol = 'tglRegistrasi';
+let sortDir = 'desc';
+let searchQuery = '';
+let activeFilters = new Set();
+let masterFileHandle = null; // File System Access handle to the current master file (persisted in IndexedDB)
+let expandedRows = new Set(); // row ids whose daily history is expanded
+let editingCell = null; // { rowId, key } — cell currently in in-place edit mode
+let lastSavedAt = null; // ISO timestamp of the last successful save (shown in top bar)
+let labResults = {}; // { mr: { loadedAt, maxDate, tests: [...] } } — latest lab file per MR wins
+let expandedLabRows = new Set(); // row ids whose lab report is expanded
+let labFilters = new Set(); // active lab-table filters: 'abnormal', 'kritis' (union)
+let colWidths = {}; // { key: px } — user-adjusted column widths (persisted in localStorage + master JSON)
+let labColWidths = {}; // { key: px } — user-adjusted widths for the expanded lab table
+let colResize = null; // active column-resize drag state
+let facilityLatestInput = {}; // { facility: 'YYYY-MM-DD HH:MM:SS' } — latest INPUT timestamp loaded per facility (advances even for empty files). Persisted in the master JSON. This is what distinguishes several uploads on the SAME date: the most recent one is the "latest input" that decides which patients are active.
+
+// Update the "last saved" badge in the top bar.
+function updateLastSavedBadge() {
+  const el = document.getElementById('lastSavedBadge');
+  if (!el) return;
+  if (!lastSavedAt) { el.textContent = '💾 Not saved yet'; return; }
+  const d = new Date(lastSavedAt);
+  const p = n => String(n).padStart(2, '0');
+  el.textContent = `💾 Saved ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+const FACILITIES = ['nusin', 'melati', 'sakura', 'observasi'];
+const FACILITY_LABELS = { nusin: 'Nusin', melati: 'Melati', sakura: 'Sakura', observasi: 'Observasi' };
+const TABS = [...FACILITIES.map(f => ({ key: f, label: FACILITY_LABELS[f] })), { key: 'archived', label: 'Archived' }, { key: 'rekap', label: 'Rekap Checklist' }];
+
+const FILTER_IDS = { telaah_resep: 'filterBtnTR', catatan_pengobatan: 'filterBtnCP', penelusuran_obat: 'filterBtnPO', rekonsiliasi_obat: 'filterBtnRO', visite: 'filterBtnV', pto: 'filterBtnPTO', konseling: 'filterBtnK', pio: 'filterBtnPIO', aso: 'filterBtnASO' };
+const CHECKLIST_ROW = ['telaah_resep', 'catatan_pengobatan', 'pio'];
+const CHECKLIST_PATIENT = ['penelusuran_obat', 'rekonsiliasi_obat', 'visite', 'pto', 'konseling'];
+const ALL_CHECKLIST = [...CHECKLIST_ROW, ...CHECKLIST_PATIENT];
+// Only these per-row items are DAILY tasks: they are cleared (and archived
+// into their log field) when a NEW day's file is loaded. Catatan Pengobatan
+// is a ONE-TIME per-patient task — once checked it stays checked and is NOT
+// emptied on a new day — so it is deliberately left out of this list.
+const DAILY_RESET_ITEMS = ['telaah_resep', 'pio'];
+// Each per-row daily item archives its cleared check into its own log field,
+// so the Rekap tab keeps showing the previous day's completed work.
+const DAILY_LOG_FIELD = { telaah_resep: 'telaahLog', catatan_pengobatan: 'catatanLog', pio: 'pioLog' };
+const CHECKLIST_LABELS = {
+  telaah_resep: 'Telaah Resep', catatan_pengobatan: 'Catatan Pengobatan', pio: 'PIO',
+  penelusuran_obat: 'Penelusuran Obat',
+  rekonsiliasi_obat: 'Rekonsiliasi Obat', visite: 'Visite', pto: 'PTO', konseling: 'Konseling',
+  aso: 'ASO ⚠'
+};
+
+// All facilities show the same columns. Diagnosis/Operan/Terapi (and the
+// Pharmacist Note) are editable text cells on every facility — shown as plain
+// text, click to edit in place. Pre-filled from the handover file for Nusin,
+// typed manually for the others (or when the file has no data).
+const COLS_FULL = [
+  { key: 'tglRegistrasi', label: 'Tgl Reg' }, { key: 'dateAdded', label: 'Tgl Input' },
+  { key: 'mr', label: 'MR', cls: 'mr-col' }, { key: 'nama', label: 'Nama', cls: 'name-col' },
+  { key: 'umur', label: 'Umur' }, { key: 'kamar', label: 'Kamar' }, { key: 'bed', label: 'Bed' },
+  { key: 'dokter', label: 'Dokter' }, { key: 'diagnosis', label: 'Diagnosis', cls: 'diag-col' },
+  { key: 'operan', label: 'Operan', cls: 'operan-col' }, { key: 'terapi', label: 'Terapi', cls: 'terapi-col' },
+  { key: 'hasilLab', label: 'Hasil Lab', cls: 'lab-cell' },
+  { key: 'aso', label: 'ASO', cls: 'aso-cell' },
+  { key: 'checklist', label: 'Checklist', cls: 'checklist-cell' },
+  { key: 'pharmacistNote', label: 'Pharmacist Note', cls: 'note-cell' },
+  { key: 'actions', label: 'Actions', cls: 'actions-cell' }
+];
+const COLS_SHORT = COLS_FULL; // kept for backward compatibility — same as full now
+const COLS_ARCHIVE = [
+  { key: 'facility', label: 'Facility' }, { key: 'tglRegistrasi', label: 'Tgl Reg' },
+  { key: 'dateAdded', label: 'Tgl Input' }, { key: 'mr', label: 'MR', cls: 'mr-col' },
+  { key: 'nama', label: 'Nama', cls: 'name-col' }, { key: 'umur', label: 'Umur' },
+  { key: 'kamar', label: 'Kamar' }, { key: 'bed', label: 'Bed' }, { key: 'dokter', label: 'Dokter' },
+  { key: 'hasilLab', label: 'Hasil Lab', cls: 'lab-cell' },
+  { key: 'aso', label: 'ASO', cls: 'aso-cell' },
+  { key: 'checklist', label: 'Checklist', cls: 'checklist-cell' },
+  { key: 'pharmacistNote', label: 'Pharmacist Note', cls: 'note-cell' },
+  { key: 'actions', label: 'Actions', cls: 'actions-cell' }
+];
+
+// ── Toast ──────────────────────────────────────────────────────────────
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hide');
+  setTimeout(() => t.classList.add('hide'), 2500);
+}
+
+// ── Date helpers ───────────────────────────────────────────────────────
+function nowDT() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function todayStr() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+// Format a Date as a sortable 'YYYY-MM-DD HH:MM:SS' timestamp (local time).
+// Used for the per-row / per-facility "input timestamp" that drives archiving.
+function fmtTs(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+// Build the INPUT TIMESTAMP for a loaded file: the DATE part comes from the
+// filename (the logical report date) and the TIME part from the file's
+// last-modified time. This is what makes archiving correct:
+//   - a LATER day always wins (the filename date dominates the comparison),
+//     even if its file was saved earlier than an older day's file;
+//   - within the SAME day, the newest upload wins (the mtime time breaks the
+//     tie), which is what distinguishes several uploads on the same date.
+// Falls back to the mtime's own date when the filename has no date.
+function inputTimestamp(fileDate, file) {
+  if (!file.lastModified) return fileDate + ' 00:00:00';
+  const d = new Date(file.lastModified);
+  const p = n => String(n).padStart(2, '0');
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  return fileDate + ' ' + time;
+}
+
+// ── Facility detection ─────────────────────────────────────────────────
+function detectFacility(filename) {
+  const lower = filename.toLowerCase();
+  for (const f of FACILITIES) {
+    if (lower.includes(f)) return f;
+  }
+  return null;
+}
+
+// Extract the report date from the filename (e.g. "nusin 27-08-26.xlsx" → "2026-08-27").
+// Supports DD-M-YY, DD-MM-YY, DD-M-YYYY, DD-MM-YYYY (also with dots). Falls back to
+// today when no date is found — so a single file loaded "now" still behaves as before.
+// CRITICAL for Riwayat: when several days of files are loaded in one batch, each file
+// must keep its OWN date, otherwise every day's snapshot collapses into today's date
+// and the per-patient history (and the "Riwayat (N)" button) is lost.
+function dateFromFilename(filename) {
+  const m = filename.toLowerCase().match(/(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})/);
+  if (!m) return todayStr();
+  let day = parseInt(m[1], 10), mon = parseInt(m[2], 10);
+  let year = parseInt(m[3], 10);
+  if (year < 100) year += 2000;
+  if (day < 1 || day > 31 || mon < 1 || mon > 12) return todayStr();
+  return `${year}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Row identity: one row per patient per facility. The same MR appearing on
+// multiple daily Excel files MERGES into that single row (latest data wins),
+// so a patient never shows up as duplicate rows on different dates.
+function rowId(mr, facility) {
+  return mr + '_' + facility;
+}
+
+// Find the row for an MR + facility, tolerating leading-zero differences in
+// the MR. Excel sometimes exports the MEDREC as a NUMBER, which drops leading
+// zeros (067016 -> 67016). Without this, a numeric MR would not match the
+// existing zero-padded row, so the merge would create a DUPLICATE row (which
+// gets auto-archived) and the patient's operan/diagnosis/terapi would appear
+// to "not update". We match on the digit string (leading zeros stripped) and
+// return the existing row's CANONICAL MR so new data lands on the right row.
+function findRowByMR(mr, facility) {
+  const exact = rows.find(r => r.id === rowId(mr, facility));
+  if (exact) return { row: exact, canonicalMr: exact.mr };
+  const digits = String(mr).replace(/^0+/, '') || '0';
+  const match = rows.find(r => r.facility === facility && ((String(r.mr).replace(/^0+/, '')) || '0') === digits);
+  if (match) return { row: match, canonicalMr: match.mr };
+  return { row: null, canonicalMr: mr };
+}
+
+// ── Daily history (every day's data is kept inside the merged row) ────────────
+// The merged row always shows the LATEST day's values, but each day's snapshot
+// is stored in row.history so nothing is ever lost. Expand "Riwayat" to see all days.
+const HISTORY_FIELDS = ['tglRegistrasi','nama','umur','kamar','bed','dokter','diagnosis','operan','terapi'];
+function ensureHistory(row) {
+  if (!row.history) row.history = [];
+  return row.history;
+}
+function recordHistory(row, date, fields) {
+  const h = ensureHistory(row);
+  let e = h.find(x => x.date === date);
+  if (!e) { e = { date }; h.push(e); }
+  HISTORY_FIELDS.forEach(k => { if (fields[k] != null && fields[k] !== '') e[k] = fields[k]; });
+  h.sort((a, b) => String(b.date).localeCompare(String(a.date))); // newest first
+}
+// Riwayat shows only PAST days. The current/latest day (row.dateAdded) is
+// already displayed in the main row, so it is excluded from the history view.
+// All days are still STORED in row.history (nothing is lost) — when a new day
+// arrives, the previous "current" day becomes a past day and appears here.
+function pastHistory(row) {
+  return (row.history || []).filter(e => e.date !== row.dateAdded);
+}
+function toggleHistory(rowId) {
+  if (expandedRows.has(rowId)) expandedRows.delete(rowId);
+  else expandedRows.add(rowId);
+  render();
+}
+
+// ── Daily-task reset ───────────────────────────────────────────────────
+// Only the DAILY_RESET_ITEMS (Telaah Resep) are per-row DAILY tasks. When a
+// patient appears in a NEW (later) day's file (dateAdded advances), the
+// previous day's check is stale → clear it. Reloading the same day's file
+// (dateAdded unchanged) keeps the check, so re-importing a file is idempotent.
+// An OLDER file loaded out of order does NOT clear it either — the user's
+// current-day work must survive. The cleared check is archived in row.telaahLog
+// so the Rekap tab keeps showing the previous day's completed work (one entry
+// per date, newest ts wins). Catatan Pengobatan is NOT reset here: it is a
+// one-time per-patient task that stays checked across days.
+function touchRowDate(row, today, ts, advanceLastSeen = true) {
+  if (!row.checklist) row.checklist = {};
+  if (today > row.dateAdded) {
+    DAILY_RESET_ITEMS.forEach(key => {
+      const tsv = row.checklist[key];
+      if (tsv) {
+        const logField = DAILY_LOG_FIELD[key];
+        if (!row[logField]) row[logField] = [];
+        const d = tsv.slice(0, 10);
+        const i = row[logField].findIndex(e => e.date === d);
+        if (i >= 0) row[logField][i] = { date: d, ts: tsv };
+        else row[logField].push({ date: d, ts: tsv });
+      }
+      row.checklist[key] = null;
+    });
+  }
+  // Only ADVANCE the date — never roll it back. Loading an older file out of
+  // order must not move the patient's "latest input date" backwards, otherwise
+  // the auto-archive sync (which keys off the latest date) would wrongly
+  // archive current patients.
+  if (today > row.dateAdded) row.dateAdded = today;
+  // Record the INPUT TIMESTAMP (file last-modified time). This is what
+  // distinguishes several uploads on the SAME date: the most recent upload
+  // has the newest timestamp and is the "latest input" that decides which
+  // patients are active. Only advance — never roll back.
+  // advanceLastSeen=false for handover (operan) files: they are a subset of
+  // the patients, so they must not move a row onto the "latest input".
+  if (advanceLastSeen && ts && (!row.lastSeen || ts > row.lastSeen)) row.lastSeen = ts;
+}
+
+// ── Auto archive / unarchive based on latest input data ────────────────
+// A patient is ACTIVE iff they appear in their facility's LATEST INPUT.
+// "Latest input" is the newest INPUT TIMESTAMP (file last-modified time) for
+// that facility — NOT just the date. This is what makes several uploads on the
+// SAME date work: the most recent upload is the latest input, and a patient who
+// moved out (present in an earlier same-day file but absent from the newest one)
+// is archived, while a patient still in the newest file stays active.
+// After each Excel load this re-syncs every row:
+//   - a patient missing from the latest input is auto-ARCHIVED
+//   - an archived patient who reappears in the latest input is returned to ACTIVE
+// Rows are matched to the latest input by their `lastSeen` timestamp. Every
+// row is guaranteed to have a `lastSeen` (applyMasterData backfills it from
+// dateAdded for legacy rows; new rows get it from the loaded file), so a row
+// is "in the latest input" iff its lastSeen equals the facility's latest input
+// timestamp. A row with no input data (no lastSeen) never matches and is
+// archived — which is correct.
+function syncArchiveState() {
+  // "Latest input" per facility = the tracked facilityLatestInput, which is
+  // AUTHORITATIVE where present. It advances even when a facility's latest
+  // registry file has ZERO patients (e.g. an empty daily report), which is
+  // what correctly archives patients no longer in that facility. Only the
+  // registry file advances it (the handover/operan file is a subset and never
+  // does), so a row's lastSeen can never outrun it — except legacy rows
+  // backfilled from dateAdded, which must not override the tracked value.
+  // For facilities with NO tracked input (legacy masters), fall back to the
+  // newest row lastSeen.
+  const latestByFacility = {};
+  Object.keys(facilityLatestInput).forEach(f => {
+    latestByFacility[f] = facilityLatestInput[f];
+  });
+  rows.forEach(r => {
+    if (!r.lastSeen || facilityLatestInput[r.facility]) return;
+    if (!latestByFacility[r.facility] || r.lastSeen > latestByFacility[r.facility]) {
+      latestByFacility[r.facility] = r.lastSeen;
+    }
+  });
+  let archived = 0, unarchived = 0;
+  rows.forEach(r => {
+    const latest = latestByFacility[r.facility];
+    if (latest == null) return; // no input recorded for this facility yet
+    // A row is "in the latest input" when its lastSeen equals the facility's
+    // latest input timestamp.
+    const inLatest = r.lastSeen === latest;
+    if (inLatest && r.archived) {
+      r.archived = false; r.archivedAt = null; unarchived++;
+    } else if (!inLatest && !r.archived) {
+      r.archived = true; r.archivedAt = nowDT(); archived++;
+    }
+  });
+  return { archived, unarchived };
+}
+
+// ── Build tabs ─────────────────────────────────────────────────────────
+function buildTabs() {
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = '';
+  TABS.forEach(tab => {
+    const el = document.createElement('div');
+    el.className = 'tab' + (currentTab === tab.key ? ' active' : '');
+    el.id = 'tab_' + tab.key;
+    // Add count for facility tabs
+    if (FACILITIES.includes(tab.key)) {
+      const count = rows.filter(r => r.facility === tab.key && !r.archived).length;
+      el.textContent = `${tab.label} (${count})`;
+    } else if (tab.key === 'archived') {
+      const count = rows.filter(r => r.archived).length;
+      el.textContent = `${tab.label} (${count})`;
+    } else {
+      el.textContent = tab.label;
+    }
+    el.onclick = () => switchTab(tab.key);
+    bar.appendChild(el);
+  });
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  editingCell = null;
+  // Show/hide filter bars
+  const isFacilityTab = FACILITIES.includes(tab);
+  const isArchivedTab = tab === 'archived';
+  const isRekapTab = tab === 'rekap';
+  document.getElementById('filterBar').style.display = isFacilityTab ? 'flex' : 'none';
+  document.getElementById('archiveFilterBar').style.display = isArchivedTab ? 'flex' : 'none';
+  render();
+}
+
+// ── Search ─────────────────────────────────────────────────────────────
+function handleSearch() {
+  searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+  render();
+}
+function matchesSearch(row) {
+  if (!searchQuery) return true;
+  return (row.mr || '').toLowerCase().includes(searchQuery) ||
+         (row.nama || '').toLowerCase().includes(searchQuery);
+}
+
+// ── Filter (checklist) ─────────────────────────────────────────────────
+function toggleFilter(key) {
+  if (activeFilters.has(key)) activeFilters.delete(key);
+  else activeFilters.add(key);
+  Object.keys(FILTER_IDS).forEach(k => {
+    document.getElementById(FILTER_IDS[k]).classList.toggle('active', activeFilters.has(k));
+  });
+  render();
+}
+function isItemDone(row, key) {
+  if (key === 'aso') return asoDueCount(row) === 0;
+  if (CHECKLIST_ROW.includes(key)) return !!(row.checklist || {})[key];
+  const pc = patientChecklist[row.mr] || {};
+  return !!pc[key];
+}
+function matchesFilters(row) {
+  if (!activeFilters.size) return true;
+  for (const key of activeFilters) { if (isItemDone(row, key)) return false; }
+  return true;
+}
+function getUndoneCount(key, facility) {
+  return rows.filter(r => !r.archived && r.facility === facility && !isItemDone(r, key)).length;
+}
+
+// ── Sorting ────────────────────────────────────────────────────────────
+function sortRows(key) {
+  if (sortCol === key) { sortDir = sortDir === 'asc' ? 'desc' : 'default'; }
+  else { sortCol = key; sortDir = 'asc'; }
+  if (sortDir === 'default') { sortCol = 'tglRegistrasi'; sortDir = 'desc'; }
+  render();
+}
+function getSorted(arr) {
+  return [...arr].sort((a, b) => {
+    let va = a[sortCol] || '', vb = b[sortCol] || '';
+    if (sortCol === 'tglRegistrasi' || sortCol === 'dateAdded') {
+      // Fixed-format timestamps ("YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS"):
+      // plain string comparison IS chronological order. A date-only value
+      // sorts before the same date with a time (treated as 00:00:00).
+      const sa = String(va), sb = String(vb);
+      const cmp = sa < sb ? -1 : sa > sb ? 1 : 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    }
+    if (sortCol === 'facility') {
+      const fi = FACILITIES.indexOf(String(va)), fj = FACILITIES.indexOf(String(vb));
+      const cmp = (fi >= 0 ? fi : 99) - (fj >= 0 ? fj : 99);
+      return sortDir === 'asc' ? cmp : -cmp;
+    }
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return sortDir === 'asc' ? na - nb : nb - na;
+    const cmp = String(va).localeCompare(String(vb), 'id');
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+}
+function sortArrow(key) {
+  if (sortCol !== key || sortDir === 'default') return '';
+  return sortDir === 'asc' ? '\u25B2' : '\u25BC';
+}
+
+// ── Column widths (user-adjustable, persisted) ───────────────────────
+// Defaults are sized to fit a 1080p (1920px) monitor; widening any column
+// beyond the container makes .table-wrap scroll horizontally.
+const DEFAULT_COL_WIDTHS = {
+  tglRegistrasi: 85, dateAdded: 125, mr: 75, nama: 150, umur: 55, kamar: 55,
+  bed: 45, dokter: 130, diagnosis: 160, operan: 160, terapi: 160,
+  hasilLab: 170, aso: 180, checklist: 270, pharmacistNote: 150, actions: 85, facility: 90
+};
+function getColWidth(key) { return colWidths[key] || DEFAULT_COL_WIDTHS[key] || 120; }
+function loadColWidths() { try { colWidths = JSON.parse(localStorage.getItem('rekap-col-widths') || '{}'); } catch (e) { colWidths = {}; } }
+function saveColWidths() { try { localStorage.setItem('rekap-col-widths', JSON.stringify(colWidths)); } catch (e) {} }
+function startColResize(e, key) {
+  e.preventDefault();
+  e.stopPropagation();
+  const th = e.currentTarget.closest('th');
+  const table = th.closest('table');
+  const idx = Array.from(table.tHead.rows[0].cells).indexOf(th);
+  const colEl = table.querySelectorAll('colgroup col')[idx];
+  if (!colEl) return;
+  colResize = { key, startX: e.clientX, startWidth: getColWidth(key), colEl, table, newWidth: getColWidth(key) };
+  document.addEventListener('mousemove', onColResize);
+  document.addEventListener('mouseup', endColResize);
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+}
+function onColResize(e) {
+  if (!colResize) return;
+  let w = colResize.startWidth + (e.clientX - colResize.startX);
+  if (w < 40) w = 40;
+  colResize.newWidth = w;
+  colResize.colEl.style.width = w + 'px';
+  let total = 0;
+  colResize.table.querySelectorAll('colgroup col').forEach(c => total += parseInt(c.style.width) || 0);
+  colResize.table.style.width = total + 'px';
+}
+function endColResize() {
+  if (!colResize) return;
+  if (colResize.isLab) {
+    labColWidths[colResize.key] = colResize.newWidth;
+    saveLabColWidths();
+  } else {
+    colWidths[colResize.key] = colResize.newWidth;
+    saveColWidths();
+  }
+  document.removeEventListener('mousemove', onColResize);
+  document.removeEventListener('mouseup', endColResize);
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+  colResize = null;
+}
+
+// ── Lab-table column resize (the expanded Hasil Lab table) ─────────────
+// The lab table has a fixed set of columns; widths are user-adjustable and
+// persisted in localStorage + the master JSON (labColWidths), like the main
+// table. Keys: nama, hasil, komentar, normal, satuan, keterangan, tanggal.
+const LAB_COLS = [
+  { key: 'nama', label: 'Nama Pemeriksaan' },
+  { key: 'hasil', label: 'Hasil' },
+  { key: 'komentar', label: 'Komentar' },
+  { key: 'normal', label: 'Nilai Normal' },
+  { key: 'satuan', label: 'Satuan' },
+  { key: 'keterangan', label: 'Keterangan' },
+  { key: 'tanggal', label: 'Tanggal' }
+];
+const DEFAULT_LAB_COL_WIDTHS = {
+  nama: 160, hasil: 90, komentar: 120, normal: 110, satuan: 70, keterangan: 200, tanggal: 130
+};
+function getLabColWidth(key) { return labColWidths[key] || DEFAULT_LAB_COL_WIDTHS[key] || 100; }
+function loadLabColWidths() { try { labColWidths = JSON.parse(localStorage.getItem('rekap-lab-col-widths') || '{}'); } catch (e) { labColWidths = {}; } }
+function saveLabColWidths() { try { localStorage.setItem('rekap-lab-col-widths', JSON.stringify(labColWidths)); } catch (e) {} }
+function startLabColResize(e, key) {
+  e.preventDefault();
+  e.stopPropagation();
+  const th = e.currentTarget.closest('th');
+  const table = th.closest('table');
+  const idx = Array.from(table.tHead.rows[0].cells).indexOf(th);
+  const colEl = table.querySelectorAll('colgroup col')[idx];
+  if (!colEl) return;
+  colResize = { key, startX: e.clientX, startWidth: getLabColWidth(key), colEl, table, newWidth: getLabColWidth(key), isLab: true };
+  document.addEventListener('mousemove', onColResize);
+  document.addEventListener('mouseup', endColResize);
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+}
+
+// ── Checklist handlers ─────────────────────────────────────────────────
+function toggleRowCheck(rowId, key) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row) return;
+  row.checklist[key] = row.checklist[key] ? null : nowDT();
+  markDirty();
+  render();
+}
+function togglePatientCheck(mr, key) {
+  if (!patientChecklist[mr]) patientChecklist[mr] = {};
+  patientChecklist[mr][key] = patientChecklist[mr][key] ? null : nowDT();
+  markDirty();
+  render();
+}
+
+// ── Editable text cells (Diagnosis / Operan / Terapi / Pharmacist Note) ──
+// Cells render as plain text (full content, no box). Click a cell to edit it
+// in place; blur (clicking away) commits, Esc cancels. Manual edits are
+// preserved across merges: a later Excel file only overwrites a field if it
+// actually contains a value for it (see parseRegistry / flushHandoverPatient).
+const EDITABLE_KEYS = ['diagnosis', 'operan', 'terapi', 'pharmacistNote'];
+function startEditCell(rowId, key) {
+  if (!EDITABLE_KEYS.includes(key)) return;
+  editingCell = { rowId, key };
+  render();
+}
+function commitEditCell(rowId, key, val) {
+  // Guard: if the edit was already canceled (Esc), the blur that follows the
+  // re-render must NOT commit the typed value.
+  if (!editingCell || editingCell.rowId !== rowId || editingCell.key !== key) return;
+  const row = rows.find(r => r.id === rowId);
+  if (row) {
+    row[key] = val;
+    // Record the manual edit into the CURRENT day's history snapshot so
+    // Riwayat shows it for this date. The file loaders record their own fields
+    // into history, but a hand-typed Diagnosis/Operan/Terapi was previously
+    // dropped — so once the day became a past day, Riwayat showed it empty.
+    // The value is set directly (even when cleared) because this is the user's
+    // explicit action for that day. pharmacistNote is not a history field, so
+    // it is skipped.
+    if (HISTORY_FIELDS.includes(key) && row.dateAdded) {
+      const h = ensureHistory(row);
+      let e = h.find(x => x.date === row.dateAdded);
+      if (!e) { e = { date: row.dateAdded }; h.push(e); }
+      e[key] = val;
+      h.sort((a, b) => String(b.date).localeCompare(String(a.date))); // newest first
+    }
+  }
+  editingCell = null;
+  markDirty();
+  render();
+}
+function cancelEditCell() {
+  editingCell = null;
+  render();
+}
+
+// ── Archive ────────────────────────────────────────────────────────────
+function toggleArchive(rowId) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row) return;
+  row.archived = !row.archived;
+  row.archivedAt = row.archived ? nowDT() : null;
+  toast(`${row.nama} ${row.archived ? 'archived' : 'unarchived'}`);
+  markDirty();
+  render();
+}
+
+// ── Master file handle persistence (IndexedDB) ─────────────────────────
+const MASTER_HANDLE_KEY = 'master_data_handle';
+async function idbGetHandle() {
+  return new Promise(resolve => {
+    if (!window.indexedDB) return resolve(null);
+    const req = indexedDB.open('rekap-visite', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onerror = () => resolve(null);
+    req.onsuccess = () => {
+      try {
+        const g = req.result.transaction('kv').objectStore('kv').get(MASTER_HANDLE_KEY);
+        g.onsuccess = () => resolve(g.result || null);
+        g.onerror = () => resolve(null);
+      } catch (e) { resolve(null); }
+    };
+  });
+}
+async function idbSetHandle(handle) {
+  return new Promise(resolve => {
+    if (!window.indexedDB) return resolve(false);
+    const req = indexedDB.open('rekap-visite', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onerror = () => resolve(false);
+    req.onsuccess = () => {
+      try {
+        const t = req.result.transaction('kv', 'readwrite');
+        t.objectStore('kv').put(handle, MASTER_HANDLE_KEY);
+        t.oncomplete = () => resolve(true);
+        t.onerror = () => resolve(false);
+      } catch (e) { resolve(false); }
+    };
+  });
+}
+
+// ── Master data load ───────────────────────────────────────────────────
+async function openMasterData() {
+  const pickerEl = document.getElementById('masterInput');
+  if (pickerEl.showPicker) {
+    // Chrome/Edge: pick directly and keep the handle so saves write in place.
+    try {
+      const handles = await pickerEl.showPicker({ multiple: false });
+      if (handles && handles.length) {
+        masterFileHandle = handles[0];
+        await idbSetHandle(masterFileHandle);
+        applyMasterData(JSON.parse(await (await masterFileHandle.getFile()).text()));
+        toast(`Loaded ${rows.length} rows from ${masterFileHandle.name} — auto-save enabled`);
+      }
+    } catch (err) { /* user cancelled */ }
+  } else {
+    pickerEl.click(); // fallback: hidden input + FileReader, no handle binding
+  }
+}
+function handleMasterLoad(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      applyMasterData(JSON.parse(ev.target.result));
+      toast(`Loaded ${rows.length} rows from ${file.name}`);
+    } catch(err) { toast('Error: ' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ── Old-format migration ──────────────────────────────────────────────
+// Old master files (e.g. rekapitulasi-*.json) stored ONE ROW PER PATIENT PER
+// DAY (id = "{mr}_{YYYY-MM-DD}_{facility}") with no history/telaahLog. This
+// converts them to the current format: one row per (mr, facility); the latest
+// non-empty value wins for each data field (mirrors the app's "latest file
+// wins, only overwrite non-empty" merge rule); every day is preserved in
+// history; past-day Telaah Resep checks are archived in telaahLog so the
+// Rekap keeps showing them.
+function isOldFormat(data) {
+  const rs = data.rows || [];
+  if (!rs.length) return false;
+  const datedId = rs.some(r => /^\d+_\d{4}-\d{2}-\d{2}_/.test(r.id || ''));
+  const noHistory = rs.every(r => !Array.isArray(r.history));
+  return datedId || noHistory;
+}
+function migrateMasterData(data) {
+  const oldRows = data.rows || [];
+  const groups = {};
+  oldRows.forEach(r => {
+    const key = r.mr + '_' + r.facility;
+    (groups[key] = groups[key] || []).push(r);
+  });
+  const DATA_FIELDS = ['tglRegistrasi','nama','umur','kamar','bed','dokter','diagnosis','operan','terapi'];
+  // Latest non-empty value across the patient's days.
+  function lastNonEmpty(dayRows, field) {
+    for (let i = dayRows.length - 1; i >= 0; i--) {
+      const v = dayRows[i][field];
+      if (v != null && String(v).trim() !== '') return v;
+    }
+    return '';
+  }
+  const newRows = Object.keys(groups).map(key => {
+    const dayRows = groups[key].slice().sort((a, b) => String(a.dateAdded).localeCompare(String(b.dateAdded)));
+    const latest = dayRows[dayRows.length - 1];
+    const history = dayRows.slice().reverse().map(r => {
+      const e = { date: r.dateAdded };
+      DATA_FIELDS.forEach(f => { e[f] = r[f] != null ? r[f] : ''; });
+      return e;
+    });
+    const telaahLog = [];
+    dayRows.slice(0, -1).forEach(r => {
+      const ts = (r.checklist || {}).telaah_resep;
+      if (ts) telaahLog.push({ date: r.dateAdded, ts });
+    });
+    const row = {
+      id: key, mr: latest.mr, facility: latest.facility, dateAdded: latest.dateAdded
+    };
+    DATA_FIELDS.forEach(f => { row[f] = lastNonEmpty(dayRows, f); });
+    row.checklist = {
+      telaah_resep: (latest.checklist || {}).telaah_resep || null,
+      catatan_pengobatan: (latest.checklist || {}).catatan_pengobatan || null,
+      pio: (latest.checklist || {}).pio || null
+    };
+    row.pharmacistNote = lastNonEmpty(dayRows, 'pharmacistNote');
+    row.archived = !!latest.archived;
+    row.archivedAt = latest.archivedAt || null;
+    row.telaahLog = telaahLog;
+    row.catatanLog = [];
+    row.pioLog = [];
+    row.aso = [];
+    row.hasilLab = null;
+    row.history = history;
+    return row;
+  });
+  return { savedAt: data.savedAt, rows: newRows, patientChecklist: data.patientChecklist || {}, labResults: data.labResults || {} };
+}
+
+// ── Save ───────────────────────────────────────────────────────────────
+// "Save All Data" overwrites the bound master file IN PLACE (one fixed file,
+// master_data.json by default) so every device stays bound to the SAME file —
+// a cloud-synced folder (Google Drive / OneDrive / …) then stays in sync on its
+// own. "Export Snapshot" writes an optional NEW timestamped backup copy:
+// rekap-visite-master-YYYY-MM-DD-HH-MM-SS.json (local time), next to the bound file.
+// ── Server mode (Option B): live sync + conflict-safe saves ─────────────
+// Active only when the app is served over http(s) from the Rekap Visite
+// server. The server stores master_data.json with a version number; every
+// save sends the version we loaded (baseVersion) and the server rejects a
+// stale save with 409, so two devices never silently overwrite each other.
+// An EventSource stream pushes a "version bumped" event to every open client
+// right after a save, so the others pick up the change without a reload.
+// Opened as file:// the app keeps the original local-file behaviour.
+const isServerMode = location.protocol === 'http:' || location.protocol === 'https:';
+let serverVersion = null; // version of the master data we last loaded/saved
+let dirty = false;        // true when there are unsaved local edits
+let serverES = null;      // EventSource for live updates (server mode)
+let serverOnline = false; // last known server connectivity
+let lastSaveTime = 0;     // to ignore the echo of our own save's broadcast
+
+function markDirty() { dirty = true; updateConnBadge(); }
+
+function currentData() {
+  return { savedAt: new Date().toISOString(), rows, patientChecklist, labResults, facilityLatestInput, colWidths, labColWidths };
+}
+
+function updateConnBadge() {
+  const el = document.getElementById('connBadge');
+  if (!el) return;
+  if (!isServerMode) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  if (serverOnline) {
+    el.textContent = dirty ? '🟡 Server · unsaved edits' : '🟢 Server · synced';
+    el.title = 'Connected to the Rekap Visite server';
+  } else {
+    el.textContent = '🔴 Server offline';
+    el.title = 'Cannot reach the Rekap Visite server';
+  }
+}
+
+async function serverLoad(silent) {
+  const res = await fetch('/api/master', { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+  applyMasterData(j.data);
+  serverVersion = j.version;
+  dirty = false;
+  serverOnline = true;
+  updateConnBadge();
+  if (!silent) toast('Loaded from server');
+}
+
+async function serverSave() {
+  const res = await fetch('/api/master', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: currentData(), baseVersion: serverVersion })
+  });
+  const j = await res.json();
+  if (res.status === 409) { handleServerConflict(j); return; }
+  if (!res.ok) throw new Error(j.error || 'save failed');
+  serverVersion = j.version;
+  dirty = false;
+  lastSaveTime = Date.now();
+  lastSavedAt = new Date().toISOString();
+  updateLastSavedBadge();
+  updateConnBadge();
+  toast('Saved to server');
+}
+
+// Generic two-button banner for conflicts / incoming updates while dirty.
+function showSyncBanner(msg, btnA, btnB) {
+  const b = document.getElementById('syncBanner');
+  if (!b) { toast(msg); return; }
+  document.getElementById('syncBannerMsg').textContent = msg;
+  const a = document.getElementById('syncBannerA');
+  const bb = document.getElementById('syncBannerB');
+  a.textContent = btnA.label; a.onclick = btnA.fn;
+  bb.textContent = btnB.label; bb.onclick = btnB.fn;
+  b.style.display = 'flex';
+}
+function hideSyncBanner() {
+  const b = document.getElementById('syncBanner');
+  if (b) b.style.display = 'none';
+}
+
+// A save was rejected because another device saved newer data first.
+function handleServerConflict(j) {
+  showSyncBanner(
+    '⚠️ Another device saved newer data after you opened this. Your save was NOT applied.',
+    { label: 'Load theirs', fn: () => {
+        applyMasterData(j.current);
+        serverVersion = j.currentVersion;
+        dirty = false; updateConnBadge(); hideSyncBanner();
+        toast('Loaded the other device\'s version');
+      } },
+    { label: 'Overwrite with mine', fn: () => {
+        serverVersion = j.currentVersion; // re-base, then force-save our data
+        hideSyncBanner();
+        serverSave();
+      } }
+  );
+}
+
+function serverSubscribe() {
+  if (serverES) serverES.close();
+  serverES = new EventSource('/api/events');
+  serverES.onmessage = (ev) => {
+    serverOnline = true; updateConnBadge();
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (typeof serverVersion === 'number' && msg.version <= serverVersion) return; // our own save
+    if (Date.now() - lastSaveTime < 2000) return; // ignore the echo of our own save
+    if (!dirty) {
+      serverLoad(true).then(() => toast('Synced from another device')).catch(() => {});
+    } else {
+      showSyncBanner(
+        '🔄 New data from another device. You have unsaved edits here.',
+        { label: 'Reload theirs', fn: () => {
+            serverLoad(true).then(() => { dirty = false; updateConnBadge(); hideSyncBanner(); });
+          } },
+        { label: 'Keep editing', fn: hideSyncBanner }
+      );
+    }
+  };
+  serverES.onerror = () => { serverOnline = false; updateConnBadge(); };
+}
+
+// ── Monthly cleanup (server mode) ──────────────────────────────────────
+// The server runs this automatically on the 1st of each month (backup first,
+// then remove archived patients). This button runs it on demand.
+async function runMonthlyCleanup() {
+  const n = rows.filter(r => r.archived).length;
+  const ok = confirm(
+    'Monthly cleanup\n\n' +
+    '1. Back up ALL data (active + archived) to a timestamped file\n' +
+    '2. Remove ' + n + ' archived patient(s) and their leftover checklist/lab data\n\n' +
+    'Active patients are kept. The backup is verified before anything is removed.\n\nContinue?'
+  );
+  if (!ok) return;
+  try {
+    const res = await fetch('/api/maintenance/run', { method: 'POST' });
+    const j = await res.json();
+    if (!j.ok) { toast('Cleanup failed: ' + (j.error || 'unknown error')); return; }
+    const lm = j.lastMaintenance;
+    toast('Cleanup done: ' + lm.removedRows + ' archived removed · backup ' + lm.backupFile);
+    if (!dirty) serverLoad(true).catch(() => {}); // if dirty, the SSE event offers the sync banner
+  } catch (err) { toast('Cleanup failed: ' + err.message); }
+}
+
+function updateCleanupBadge(lm) {
+  const el = document.getElementById('cleanupBadge');
+  if (!el) return;
+  if (!lm || !lm.ranAt) { el.style.display = 'none'; return; }
+  const d = new Date(lm.ranAt.replace(' ', 'T'));
+  el.style.display = '';
+  el.textContent = '🧹 ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + lm.removedRows + ' removed';
+  el.title = 'Last monthly cleanup: ' + lm.ranAt + ' (' + lm.trigger + ')\n' +
+    'Backup: ' + lm.backupFile + '\n' +
+    'Removed: ' + lm.removedRows + ' archived patients, ' + lm.removedChecklist + ' checklist entries, ' + lm.removedLab + ' lab results\n' +
+    'Size: ' + lm.sizeBefore + ' B → ' + lm.sizeAfter + ' B';
+}
+
+const MASTER_FILENAME = 'master_data.json';
+function timestampedFilename() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `rekap-visite-master-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.json`;
+}
+function applyMasterData(data) {
+  if (isOldFormat(data)) {
+    data = migrateMasterData(data);
+    toast('Converted old-format master data to current format');
+  }
+  rows = data.rows || [];
+  patientChecklist = data.patientChecklist || {};
+  labResults = data.labResults || {};
+  // Restore the per-facility latest INPUT timestamp (persisted in the master
+  // JSON). This is what drives auto-archive across sessions: a patient is
+  // active iff their lastSeen equals their facility's latest input timestamp.
+  facilityLatestInput = (data.facilityLatestInput && typeof data.facilityLatestInput === 'object') ? data.facilityLatestInput : {};
+  // Ensure every row has an input timestamp. Legacy rows (no lastSeen) get one
+  // derived from their dateAdded so the timestamp-based archive logic is uniform.
+  rows.forEach(r => {
+    if (!r.lastSeen && r.dateAdded) r.lastSeen = r.dateAdded + ' 00:00:00';
+  });
+  if (data.colWidths && typeof data.colWidths === 'object') {
+    colWidths = data.colWidths; // restore column widths from the master file
+    saveColWidths();
+  }
+  if (data.labColWidths && typeof data.labColWidths === 'object') {
+    labColWidths = data.labColWidths; // restore lab-table column widths
+    saveLabColWidths();
+  }
+  lastSavedAt = data.savedAt || null; // show when this file was last saved
+  updateLastSavedBadge();
+  updateCleanupBadge(data.lastMaintenance || null); // server-owned monthly job log
+  document.getElementById('reconnectBanner').style.display = 'none';
+  dirty = false; // we just adopted a known state
+  buildTabs(); render();
+}
+async function saveAllData() {
+  if (isServerMode) {
+    try { await serverSave(); } catch (err) { toast('Save error: ' + err.message); }
+    return;
+  }
+  const savedAt = new Date().toISOString();
+  const payload = JSON.stringify({ savedAt, rows, patientChecklist, labResults, facilityLatestInput, colWidths, labColWidths }, null, 2);
+  try {
+    if (window.showSaveFilePicker) {
+      let handle = masterFileHandle;
+      // Verify the persisted handle still points at a live file.
+      if (handle) {
+        try {
+          const perm = await handle.queryPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') {
+            const req = await handle.requestPermission({ mode: 'readwrite' });
+            if (req !== 'granted') throw new Error('permission denied');
+          }
+        } catch (err) {
+          // Handle is stale (file moved/renamed/deleted) — ask again.
+          masterFileHandle = null;
+          handle = null;
+        }
+      }
+      if (!handle) {
+        // No file bound yet — pick one (fixed name suggested). From now on
+        // every save overwrites this SAME file, so all devices can bind to it
+        // and a cloud-synced folder stays in sync automatically.
+        handle = await window.showSaveFilePicker({
+          suggestedName: MASTER_FILENAME,
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+        });
+      }
+      masterFileHandle = handle;
+      await idbSetHandle(handle);
+      // Overwrite the bound file IN PLACE (no new timestamped file).
+      const writable = await handle.createWritable();
+      await writable.write(payload);
+      await writable.close();
+      lastSavedAt = savedAt;
+      updateLastSavedBadge();
+      toast(`Saved to ${handle.name}`);
+    } else {
+      // No File System Access API (Android / Firefox / Safari): fall back to
+      // downloading the fixed-name file. Upload it to your synced folder
+      // (e.g. Google Drive) to push it to the other devices.
+      const blob = new Blob([payload], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = MASTER_FILENAME;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      lastSavedAt = savedAt;
+      updateLastSavedBadge();
+      toast(`Downloaded ${MASTER_FILENAME} — upload it to your synced folder to share`);
+    }
+  } catch(err) { if (err.name !== 'AbortError') toast('Save error: ' + err.message); }
+}
+
+// Optional backup: write a NEW timestamped snapshot next to the bound file
+// (the previous "every save = new file" behaviour), without re-binding the app
+// or touching the "last saved" badge.
+async function exportSnapshot() {
+  if (isServerMode) {
+    // Server mode: just download the current data as a timestamped backup.
+    const fname = timestampedFilename();
+    const blob = new Blob([JSON.stringify(currentData(), null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Snapshot downloaded: ' + fname);
+    return;
+  }
+  const savedAt = new Date().toISOString();
+  const payload = JSON.stringify({ savedAt, rows, patientChecklist, labResults, facilityLatestInput, colWidths, labColWidths }, null, 2);
+  const fname = timestampedFilename();
+  try {
+    if (!window.showSaveFilePicker) {
+      // No File System Access API: just download the snapshot.
+      const blob = new Blob([payload], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast(`Snapshot downloaded: ${fname}`);
+      return;
+    }
+    let handle = masterFileHandle;
+    if (handle) {
+      try {
+        const perm = await handle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') {
+          const req = await handle.requestPermission({ mode: 'readwrite' });
+          if (req !== 'granted') throw new Error('permission denied');
+        }
+      } catch (err) { handle = null; }
+    }
+    let target = null;
+    if (handle) {
+      // Create the snapshot next to the bound file.
+      try {
+        const dir = await handle.getParentDirectory();
+        target = await dir.getFileHandle(fname, { create: true });
+      } catch (err) { target = null; }
+    }
+    if (!target) {
+      target = await window.showSaveFilePicker({
+        suggestedName: fname,
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+      });
+    }
+    const writable = await target.createWritable();
+    await writable.write(payload);
+    await writable.close();
+    toast(`Snapshot saved: ${target.name}`);
+  } catch(err) { if (err.name !== 'AbortError') toast('Snapshot error: ' + err.message); }
+}
+
+// ── Auto-load on page open ─────────────────────────────────────────────
+async function autoLoadMaster() {
+  const handle = await idbGetHandle();
+  if (!handle) return; // never saved here before — nothing to load
+  try {
+    let perm = 'granted';
+    try { perm = await handle.queryPermission({ mode: 'read' }); } catch (e) {}
+    if (perm !== 'granted') throw new Error('no permission');
+    const f = await handle.getFile();
+    applyMasterData(JSON.parse(await f.text()));
+    masterFileHandle = handle;
+    toast(`Auto-loaded ${rows.length} rows from ${handle.name}`);
+  } catch (err) {
+    // Handle lost or permission revoked — show reconnect banner.
+    document.getElementById('reconnectBanner').style.display = 'flex';
+  }
+}
+
+// ── Excel load ─────────────────────────────────────────────────────────
+function loadExcel() { document.getElementById('excelInput').click(); }
+function handleExcelLoad(e) {
+  let files = Array.from(e.target.files);
+  if (!files.length) return;
+  // Process in chronological order so "latest file wins" is correct even when
+  // several days are loaded in one batch. Sort by the file's INPUT TIMESTAMP
+  // (filename date + mtime time): a later day always wins, and within the same
+  // day the newest upload wins. This is what orders several uploads on the SAME
+  // date correctly (the newest upload is processed last and becomes the latest
+  // input) while still letting a later day beat an earlier day even if the
+  // earlier day's file was saved more recently.
+  const tsOf = f => inputTimestamp(dateFromFilename(f.name), f);
+  files = files.slice().sort((a, b) => tsOf(a).localeCompare(tsOf(b)));
+  // FileReader callbacks fire in completion order, NOT request order — so read
+  // the files one at a time (sequential chain) to guarantee processing order.
+  let loaded = 0;
+  const next = (idx) => {
+    if (idx >= files.length) {
+      const sync = syncArchiveState();
+      markDirty();
+      buildTabs(); render();
+      let msg = `Loaded ${files.length} file(s). Total: ${rows.length}`;
+      if (sync.archived || sync.unarchived) {
+        msg += ` · ${sync.archived} archived, ${sync.unarchived} returned to active`;
+      }
+      toast(msg);
+      return;
+    }
+    const file = files[idx];
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        const facility = detectFacility(file.name);
+        if (facility) {
+          // Use the date from the filename so multi-day batches keep each day's
+          // history (Riwayat). Falls back to today for files without a date.
+          const fileDate = dateFromFilename(file.name);
+          // INPUT TIMESTAMP = filename date + mtime time. A later day always
+          // wins; within the same day the newest upload wins. This is what
+          // distinguishes several uploads on the SAME date and decides which
+          // patients are active.
+          const inputTs = inputTimestamp(fileDate, file);
+          const fname = file.name.toLowerCase();
+          const isHandover = fname.includes('operan');
+          // Track the latest input timestamp for this facility — advances even
+          // when the file has zero patients, so auto-archive can drop patients
+          // who are no longer in the facility's latest report.
+          // ONLY the registry file counts: it lists ALL active patients. The
+          // handover (operan) file is a SUBSET (patients with handover notes),
+          // so it must NOT advance facilityLatestInput — otherwise a newer
+          // operan file becomes the "latest input" and auto-archives every
+          // registry patient it does not list.
+          if (!isHandover && (!facilityLatestInput[facility] || inputTs > facilityLatestInput[facility])) {
+            facilityLatestInput[facility] = inputTs;
+          }
+          if (isHandover) parseHandover(wb, fileDate, facility, inputTs, file.name);
+          else parseRegistry(wb, fileDate, facility, inputTs);
+        } else {
+          toast('Unknown facility in: ' + file.name);
+        }
+      } catch(err) { toast('Error in ' + file.name + ': ' + err.message); }
+      loaded++;
+      next(idx + 1);
+    };
+    reader.onerror = function() {
+      toast('Read error in ' + file.name);
+      loaded++;
+      next(idx + 1);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  next(0);
+  e.target.value = '';
+}
+
+function parseRegistry(wb, today, facility, inputTs) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(json.length, 20); i++) {
+    const row = json[i].map(c => String(c || '').toLowerCase());
+    if (row.some(c => c.includes('rekam medis') || c.includes('rekam'))) { headerRow = i; break; }
+  }
+  if (headerRow < 0) return;
+
+  const headers = json[headerRow].map(h => normalizeHeader(String(h || '')));
+  const colMap = {};
+  headers.forEach((h, i) => {
+    if (h.includes('rekam') && h.includes('medis')) colMap.mr = i;
+    else if (h.includes('nama') && !h.includes('jenis')) colMap.nama = i;
+    else if (h.includes('tgl registrasi')) colMap.tglRegistrasi = i;
+    else if (h.includes('umur')) colMap.umur = i;
+    else if (h.includes('kamar')) colMap.kamar = i;
+    else if (h.includes('bed') && !h.includes('bedah')) colMap.bed = i;
+    else if (h.includes('dokter') && !h.includes('tambahan')) colMap.dokter = i;
+    else if (h.includes('dokter tambahan')) colMap.dokterTambahan = i;
+  });
+
+  for (let i = headerRow + 1; i < json.length; i++) {
+    const row = json[i];
+    const mr = cleanVal(row[colMap.mr]);
+    if (!mr) continue;
+    const nama = cleanVal(row[colMap.nama]);
+    if (!nama) continue;
+    let dokter = cleanVal(row[colMap.dokter]);
+    const dt = cleanVal(row[colMap.dokterTambahan]);
+    if (dt) dokter += ', ' + dt;
+    let tglReg = parseDate(cleanVal(row[colMap.tglRegistrasi]));
+
+    // Tolerant MR match: a numeric MR (leading zero dropped by Excel) still
+    // merges into the existing zero-padded row instead of creating a duplicate.
+    const { row: existing, canonicalMr } = findRowByMR(mr, facility);
+    if (existing) {
+      // Same patient seen again on a later daily file → merge into the one row.
+      // Latest file wins for every field; note/archive are untouched.
+      // Telaah Resep (daily task) is cleared when the day advances.
+      touchRowDate(existing, today, inputTs);
+      existing.nama = nama;
+      existing.tglRegistrasi = tglReg || existing.tglRegistrasi;
+      existing.umur = cleanVal(row[colMap.umur]) || existing.umur;
+      existing.kamar = cleanVal(row[colMap.kamar]) || existing.kamar;
+      existing.bed = cleanVal(row[colMap.bed]) || existing.bed;
+      existing.dokter = dokter || existing.dokter;
+      recordHistory(existing, today, {
+        tglRegistrasi: tglReg, nama, umur: cleanVal(row[colMap.umur]),
+        kamar: cleanVal(row[colMap.kamar]), bed: cleanVal(row[colMap.bed]), dokter
+      });
+    } else {
+      const id = rowId(canonicalMr, facility);
+      rows.push({
+        id, mr: canonicalMr, facility, dateAdded: today, lastSeen: inputTs,
+        tglRegistrasi: tglReg || '', nama,
+        umur: cleanVal(row[colMap.umur]) || '',
+        kamar: cleanVal(row[colMap.kamar]) || '',
+        bed: cleanVal(row[colMap.bed]) || '',
+        dokter: dokter || '',
+        diagnosis: '', operan: '', terapi: '', hasilLab: null, aso: [],
+        checklist: { telaah_resep: null, catatan_pengobatan: null, pio: null },
+        pharmacistNote: '', archived: false, archivedAt: null, telaahLog: [], catatanLog: [], pioLog: [],
+        history: [{ date: today, tglRegistrasi: tglReg, nama, umur: cleanVal(row[colMap.umur]), kamar: cleanVal(row[colMap.kamar]), bed: cleanVal(row[colMap.bed]), dokter }]
+      });
+    }
+  }
+}
+
+function parseHandover(wb, today, facility, inputTs, fname) {
+  wb.SheetNames.forEach(sheetName => {
+    const ws = wb.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(json.length, 20); i++) {
+      const row = json[i].map(c => String(c || '').toLowerCase());
+      if (row.some(c => c.includes('medrec'))) { headerRow = i; break; }
+    }
+    if (headerRow < 0) return;
+
+    const headers = json[headerRow].map(h => normalizeHeader(String(h || '')));
+    const colMap = {};
+    headers.forEach((h, i) => {
+      // includes-based matching (like the registry parser) so header variants
+      // such as "MED REC", "No. MedRec", "DIAGNOSA PASIEN" still map correctly.
+      if (h.includes('medrec') || (h.includes('rekam') && h.includes('medis'))) colMap.mr = i;
+      else if (h.includes('nama')) colMap.nama = i;
+      else if (h.includes('kamar')) colMap.kamar = i;
+      else if (h.includes('bed') && !h.includes('bedah')) colMap.bed = i;
+      else if (h.includes('dpjp') || h.includes('dokter')) colMap.dokter = i;
+      else if (h.includes('diagnosa') || h.includes('diagnosis')) colMap.diagnosis = i;
+      else if (h.includes('operan')) colMap.operan = i;
+      else if (h.includes('terapi')) colMap.terapi = i;
+    });
+
+    // Fallback for files that leave the TERAPI header cell blank but still fill
+    // the column right after OPERAN with the therapy text. Header-driven mapping
+    // above would drop it (silent stale data — the "didn't update" symptom). If
+    // terapi is unmapped and the column immediately after operan holds real data,
+    // treat that column as terapi. (The operan layout is fixed: …OPERAN, TERAPI.)
+    if (colMap.operan != null && colMap.terapi == null) {
+      const cand = colMap.operan + 1;
+      let hasData = false;
+      for (let i = headerRow + 1; i < json.length && !hasData; i++) {
+        if (cleanVal((json[i] || [])[cand]).length >= 10) hasData = true;
+      }
+      if (hasData) colMap.terapi = cand;
+    }
+
+    // Guard against SILENT data loss: if a sheet has real data in a column that
+    // has NO header label (e.g. the TERAPI header cell was left blank), the
+    // header-driven colMap above drops it and the patient's field stays stale —
+    // the "data didn't update" symptom. Warn so it is noticed. Ignores 1-2 char
+    // stray junk (a lone "V" or "0") and requires >=2 rows so a single stray
+    // cell does not trigger it.
+    const labeled = Object.values(colMap);
+    const maxLabeled = labeled.length ? Math.max.apply(null, labeled) : -1;
+    const orphanCount = {};
+    for (let i = headerRow + 1; i < json.length; i++) {
+      const row = json[i] || [];
+      for (let ci = maxLabeled + 1; ci < row.length; ci++) {
+        if (cleanVal(row[ci]).length >= 10) orphanCount[ci] = (orphanCount[ci] || 0) + 1;
+      }
+    }
+    const orphanCols = Object.keys(orphanCount).filter(ci => orphanCount[ci] >= 2);
+    if (orphanCols.length) {
+      toast('⚠ ' + (fname || 'file') + ' sheet "' + sheetName + '": data in unlabeled column(s) ' +
+        orphanCols.map(ci => '#' + (Number(ci) + 1)).join(', ') +
+        ' — those fields were NOT loaded (missing header label).');
+    }
+
+    let current = null;
+    for (let i = headerRow + 1; i < json.length; i++) {
+      const row = json[i];
+      const mrVal = cleanVal(row[colMap.mr]);
+      if (mrVal) {
+        if (current) flushHandoverPatient(current, today, facility, inputTs);
+        current = {
+          mr: mrVal, nama: cleanVal(row[colMap.nama]),
+          kamar: cleanVal(row[colMap.kamar]), bed: cleanVal(row[colMap.bed]),
+          dokter: cleanVal(row[colMap.dokter]),
+          diagnosis: cleanVal(row[colMap.diagnosis]),
+          operan: cleanVal(row[colMap.operan]),
+          terapi: cleanVal(row[colMap.terapi])
+        };
+      } else if (current) {
+        const d = cleanVal(row[colMap.diagnosis]); if (d) current.diagnosis += '\n' + d;
+        const o = cleanVal(row[colMap.operan]); if (o) current.operan += '\n' + o;
+        const t = cleanVal(row[colMap.terapi]); if (t) current.terapi += '\n' + t;
+      }
+    }
+    if (current) flushHandoverPatient(current, today, facility, inputTs);
+  });
+}
+
+function flushHandoverPatient(p, today, facility, inputTs) {
+  // Tolerant MR match: a numeric MR (leading zero dropped by Excel) still
+  // merges into the existing zero-padded row instead of creating a duplicate.
+  const { row: existing, canonicalMr } = findRowByMR(p.mr, facility);
+  if (existing) {
+    // Merge into the patient's single row (latest handover wins).
+    // Telaah Resep (daily task) is cleared when the day advances.
+    // advanceLastSeen=false: the handover file is a subset of the patients,
+    // so it must not move this row onto the facility's "latest input" (that
+    // would wrongly mark the patient active / archive the real registry list).
+    touchRowDate(existing, today, inputTs, false);
+    if (p.diagnosis) existing.diagnosis = p.diagnosis;
+    if (p.operan) existing.operan = p.operan;
+    if (p.terapi) existing.terapi = p.terapi;
+    if (p.dokter) existing.dokter = p.dokter;
+    if (p.nama) existing.nama = p.nama;
+    if (p.kamar) existing.kamar = p.kamar;
+    if (p.bed) existing.bed = p.bed;
+    recordHistory(existing, today, {
+      nama: p.nama, kamar: p.kamar, bed: p.bed, dokter: p.dokter,
+      diagnosis: p.diagnosis, operan: p.operan, terapi: p.terapi
+    });
+  } else {
+    // Handover loaded without a registry row for this patient yet.
+    // lastSeen stays null: the handover file is not the authoritative active
+    // list, so this row must not count as "in the latest input" (it stays
+    // archived until a registry file actually lists the patient).
+    // Use the canonical MR (zero-padded if a same-digit row exists elsewhere)
+    // so the new row can never collide with an existing patient's row.
+    const id = rowId(canonicalMr, facility);
+    rows.push({
+      id, mr: canonicalMr, facility, dateAdded: today, lastSeen: null,
+      tglRegistrasi: '',
+      nama: p.nama || '',
+      umur: '',
+      kamar: p.kamar || '',
+      bed: p.bed || '',
+      dokter: p.dokter || '',
+      diagnosis: p.diagnosis || '', operan: p.operan || '', terapi: p.terapi || '', hasilLab: null, aso: [],
+      checklist: { telaah_resep: null, catatan_pengobatan: null, pio: null },
+      pharmacistNote: '', archived: false, archivedAt: null, telaahLog: [], catatanLog: [], pioLog: [],
+      history: [{ date: today, nama: p.nama, kamar: p.kamar, bed: p.bed, dokter: p.dokter, diagnosis: p.diagnosis, operan: p.operan, terapi: p.terapi }]
+    });
+  }
+}
+
+// ── Lab results (Hasil Lab) ────────────────────────────────────────────
+// One lab report per patient (MR), loaded from lab-{MR}.xlsx. The LATEST
+// report (by file load time) completely replaces the previous one. Each test
+// row is flagged abnormal when its numeric result falls outside the numeric
+// "Nilai Normal" range/bound; a test whose "Keterangan" contains "dilaporkan"
+// is marked Lab Kritis (red "Lab Kritis" badge + red "LK" after the value).
+function loadLab() { document.getElementById('labInput').click(); }
+
+function handleLabLoad(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  let loaded = 0, skipped = 0;
+  const next = (idx) => {
+    if (idx >= files.length) {
+      markDirty();
+      render();
+      toast(`Loaded ${loaded} lab report(s)${skipped ? `, ${skipped} skipped (no MR in name)` : ''}`);
+      return;
+    }
+    const file = files[idx];
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        const m = file.name.toLowerCase().match(/^lab[-_ ]?(\d+)/);
+        if (!m) { skipped++; }
+        else {
+          const mr = m[1];
+          const report = parseLabFile(wb);
+          if (report) {
+            report.loadedAt = nowDT();
+            labResults[mr] = report; // latest file completely replaces the old one
+            loaded++;
+          } else { skipped++; }
+        }
+      } catch(err) { toast('Error in ' + file.name + ': ' + err.message); }
+      next(idx + 1);
+    };
+    reader.onerror = function() { next(idx + 1); };
+    reader.readAsArrayBuffer(file);
+  };
+  next(0);
+  e.target.value = '';
+}
+
+// Parse a lab workbook into a report object.
+// The data lives in the sheet that contains the "Nama Pemeriksaan" header row.
+// We can't assume it's the FIRST sheet: updated exports sometimes add a
+// cover/summary sheet before the "Hasil" sheet, and reading only sheet[0] made
+// those files fail to parse (→ skipped → the old lab result stayed).
+function parseLabFile(wb) {
+  let json = null, headerRow = -1;
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const row = rows[i].map(c => String(c || '').toLowerCase());
+      if (row.some(c => c.includes('nama pemeriksaan'))) { json = rows; headerRow = i; break; }
+    }
+    if (headerRow >= 0) break;
+  }
+  if (headerRow < 0) return null;
+  const headers = json[headerRow].map(h => normalizeHeader(String(h || '')));
+  const colMap = {};
+  headers.forEach((h, i) => {
+    if (h.includes('nama pemeriksaan')) colMap.nama = i;
+    else if (h.includes('hasil pemeriksaan')) colMap.hasil = i;
+    else if (h.includes('komentar')) colMap.komentar = i;
+    else if (h.includes('nilai normal')) colMap.normal = i;
+    else if (h.includes('satuan')) colMap.satuan = i;
+    else if (h.includes('keterangan')) colMap.keterangan = i;
+    else if (h.includes('tanggal hasil')) colMap.tanggal = i;
+  });
+  if (colMap.nama == null || colMap.hasil == null) return null;
+  const tests = [];
+  let maxDate = '';
+  let currentJenis = '';
+  for (let i = headerRow + 1; i < json.length; i++) {
+    const row = json[i];
+    // "Jenis: X" section markers sit in column A; track the current category.
+    const a = cleanVal(row[0]);
+    if (a.toLowerCase().startsWith('jenis')) {
+      currentJenis = a.replace(/^jenis[:\s]*/i, '').trim();
+      continue;
+    }
+    const nama = cleanVal(row[colMap.nama]);
+    if (!nama) continue;
+    const hasil = cleanVal(row[colMap.hasil]);
+    const komentar = colMap.komentar != null ? cleanVal(row[colMap.komentar]) : '';
+    const keterangan = colMap.keterangan != null ? cleanVal(row[colMap.keterangan]) : '';
+    // A "REPORT" row is normally the trailing footer (skip it). But in the
+    // Resistensi (antibiotic-resistance) section the finding is stored in a
+    // REPORT row — the result text sits in the Komentar column (e.g.
+    // "Extended Spectrum Beta Lactamase(ESBL)"). Keep a REPORT row only if it
+    // carries data; otherwise it's a pure footer. Dropping these rows is what
+    // made an updated file (whose only new content was a resistensi finding)
+    // parse to the SAME report as the old one, so the "full replace" showed no
+    // change.
+    const isReport = /^report$/i.test(nama);
+    if (isReport && !hasil && !komentar && !keterangan) continue;
+    let normal = colMap.normal != null ? cleanVal(row[colMap.normal]) : '';
+    // eGFR: always override the normal value to ">60" (abnormal when < 60).
+    if (/egfr/i.test(nama)) normal = '>60';
+    // GD (POCT) tests (Sewaktu / 2 Jam PP): always override the normal value to "70 - 139".
+    else if (/^gd\b.*\(poct\)/i.test(nama)) normal = '70 - 139';
+    const satuan = colMap.satuan != null ? cleanVal(row[colMap.satuan]) : '';
+    const tanggal = colMap.tanggal != null ? cleanVal(row[colMap.tanggal]) : '';
+    if (tanggal > maxDate) maxDate = tanggal;
+    tests.push({
+      nama: isReport ? 'Resistensi' : nama,
+      hasil, komentar, normal, satuan, keterangan, tanggal, jenis: currentJenis,
+      abnormal: labAbnormal(hasil, normal),
+      kritis: keterangan.toLowerCase().includes('dilaporkan')
+    });
+  }
+  if (!tests.length) return null;
+  return { loadedAt: null, maxDate, tests };
+}
+
+// A test is abnormal when BOTH the result and the normal value are numeric and
+// the result falls outside the normal range/bound. Text values (Negatif,
+// Kuning, MRR, ...) are never flagged — no false positives.
+function labAbnormal(hasil, normal) {
+  const v = labNum(hasil);
+  if (v == null) return false;
+  const n = labNormal(normal);
+  if (!n) return false;
+  if (n.kind === 'range') return !(n.lo <= v && v <= n.hi);
+  if (n.kind === 'lt') return v > n.hi;
+  if (n.kind === 'gt') return v < n.lo;
+  return false;
+}
+// Leading number of a value (handles "33.2", "(-2)", "+2", "1.015").
+function labNum(s) {
+  if (s == null) return null;
+  const m = String(s).trim().match(/^\(?([+-]?\d+(?:\.\d+)?)\)?/);
+  return m ? parseFloat(m[1]) : null;
+}
+// Parse a "Nilai Normal" into {kind:'range'|'lt', lo, hi} or null.
+function labNormal(s) {
+  if (s == null) return null;
+  s = String(s).trim();
+  if (!s) return null;
+  let m = s.match(/^<=?\s*\(?([+-]?\d+(?:\.\d+)?)\)?\s*$/);
+  if (m) return { kind: 'lt', lo: null, hi: parseFloat(m[1]) };
+  m = s.match(/^>=?\s*\(?([+-]?\d+(?:\.\d+)?)\)?\s*$/);
+  if (m) return { kind: 'gt', lo: parseFloat(m[1]), hi: null };
+  m = s.match(/^\(?([+-]?\d+(?:\.\d+)?)\)?\s*-\s*\(?([+-]?\d+(?:\.\d+)?)\)?\s*$/);
+  if (m) return { kind: 'range', lo: parseFloat(m[1]), hi: parseFloat(m[2]) };
+  return null;
+}
+
+function labSummary(mr) {
+  const rep = labResults[mr];
+  if (!rep) return null;
+  const abnormal = rep.tests.filter(t => t.abnormal).length;
+  const kritis = rep.tests.filter(t => t.kritis).length;
+  return { rep, abnormal, kritis };
+}
+
+function toggleLab(rowId) {
+  if (expandedLabRows.has(rowId)) expandedLabRows.delete(rowId);
+  else expandedLabRows.add(rowId);
+  render();
+}
+// Lab-table filters: show only abnormal and/or kritis tests (union of active filters).
+function toggleLabFilter(key) {
+  if (labFilters.has(key)) labFilters.delete(key);
+  else labFilters.add(key);
+  render();
+}
+function labTestVisible(t) {
+  if (!labFilters.size) return true;
+  if (labFilters.has('abnormal') && t.abnormal) return true;
+  if (labFilters.has('kritis') && t.kritis) return true;
+  return false;
+}
+// Copy text to the clipboard. navigator.clipboard only exists in secure
+// contexts (https / localhost) — over plain http (LAN access) it is
+// undefined, so fall back to a hidden textarea + execCommand('copy').
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('execCommand copy failed'));
+    } catch (e) { reject(e); }
+  });
+}
+
+// Copy the currently-visible (filtered) lab tests to the clipboard as
+// "Test name Value" per line (respects the active Abnormal/Kritis filter).
+function copyLab(rowId) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row) return;
+  const rep = labResults[row.mr];
+  if (!rep) return;
+  const lines = rep.tests.filter(labTestVisible).map(t => t.nama + ' ' + t.hasil);
+  const text = lines.join('\n');
+  copyToClipboard(text).then(() => toast(`Copied ${lines.length} test(s)`)).catch(() => toast('Copy failed'));
+}
+
+// ── ASO (meds to stop) ────────────────────────────────────────────────
+// Each row can carry a list of meds (row.aso = [{id, name, stopDate, stopped,
+// stoppedAt}]). A med is DUE (warning) when it is not stopped and its stopDate
+// is on/before today. Confirming "stopped" (the ✓ button) clears the warning
+// and records when it was stopped. The "ASO" filter button lists patients who
+// still have a med due to stop.
+function asoDue(med) {
+  return !med.stopped && med.stopDate && med.stopDate <= todayStr();
+}
+function asoDueCount(row) {
+  return (row.aso || []).filter(asoDue).length;
+}
+// Top-of-page alert banner: total count of meds due to stop across ALL
+// active (non-archived) patients, in every facility. Shown whenever > 0 and
+// hidden again once every due med is confirmed stopped or removed. render()
+// calls this on every state change so the number stays live.
+function updateAsoAlertBanner() {
+  const el = document.getElementById('asoAlertBanner');
+  if (!el) return;
+  const total = rows.reduce((n, r) => n + (r.archived ? 0 : asoDueCount(r)), 0);
+  if (total > 0) {
+    el.textContent = `⚠️ ASO Alert : ${total} ${total === 1 ? 'med' : 'meds'}`;
+    el.style.display = 'flex';
+  } else {
+    el.style.display = 'none';
+  }
+}
+function asoAdd(rowId) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row) return;
+  if (!row.aso) row.aso = [];
+  row.aso.push({ id: Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: '', stopDate: '', stopped: false, stoppedAt: null });
+  markDirty();
+  render();
+}
+function asoSetName(rowId, idx, val) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row || !row.aso || !row.aso[idx]) return;
+  row.aso[idx].name = val;
+  markDirty();
+}
+function asoSetDate(rowId, idx, val) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row || !row.aso || !row.aso[idx]) return;
+  row.aso[idx].stopDate = val;
+  markDirty();
+  render(); // re-evaluate the due state
+}
+function asoToggleStopped(rowId, idx) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row || !row.aso || !row.aso[idx]) return;
+  const med = row.aso[idx];
+  med.stopped = !med.stopped;
+  med.stoppedAt = med.stopped ? nowDT() : null;
+  markDirty();
+  render();
+}
+function asoRemove(rowId, idx) {
+  const row = rows.find(r => r.id === rowId);
+  if (!row || !row.aso || !row.aso[idx]) return;
+  row.aso.splice(idx, 1);
+  markDirty();
+  render();
+}
+function renderAsoCell(row, isArchived) {
+  const meds = row.aso || [];
+  let html = '<td class="aso-cell">';
+  const due = meds.filter(asoDue).length;
+  if (due > 0) html += `<div class="aso-due-badge">⚠ ${due} due to stop</div>`;
+  if (!meds.length) {
+    html += `<span class="aso-empty">—</span>`;
+  } else {
+    meds.forEach((med, idx) => {
+      const d = asoDue(med);
+      html += `<div class="aso-item${d ? ' due' : ''}">`;
+      if (isArchived) {
+        html += `<div class="aso-name" style="border:none;">${esc(med.name) || '—'}</div>`;
+        html += `<div class="aso-row2"><span class="aso-date" style="border:none;">${esc(med.stopDate) || ''}</span>`;
+        html += med.stopped ? `<span class="aso-stop stopped">✓ stopped</span>` : `<span class="aso-stop">…</span>`;
+        html += `</div>`;
+      } else {
+        html += `<input class="aso-name" value="${esc(med.name)}" placeholder="Med name" onchange="asoSetName('${row.id}', ${idx}, this.value)">`;
+        html += `<div class="aso-row2">`;
+        html += `<input type="date" class="aso-date" value="${esc(med.stopDate)}" onchange="asoSetDate('${row.id}', ${idx}, this.value)">`;
+        html += `<button class="aso-stop${med.stopped ? ' stopped' : ''}" title="${med.stopped ? 'Stopped ' + esc(med.stoppedAt || '') : 'Confirm stopped'}" onclick="asoToggleStopped('${row.id}', ${idx})">✓</button>`;
+        html += `<button class="aso-del" title="Remove" onclick="asoRemove('${row.id}', ${idx})">×</button>`;
+        html += `</div>`;
+      }
+      html += '</div>';
+    });
+  }
+  // The add button is ALWAYS shown on active rows (even when the list is
+  // empty) — otherwise an empty cell has no way to add the first med.
+  if (!isArchived) html += `<button class="aso-add" onclick="asoAdd('${row.id}')">+ Add med</button>`;
+  html += '</td>';
+  return html;
+}
+
+// ── Rekap ──────────────────────────────────────────────────────────────
+function buildRekapData() {
+  const rekap = {};
+  // Telaah Resep — per row. Includes the current check PLUS archived checks
+  // (telaahLog) from previous days, so a daily reset never erases completed
+  // work from the rekap.
+  rows.forEach(row => {
+    CHECKLIST_ROW.forEach(key => {
+      const stamps = [];
+      const ts = (row.checklist || {})[key];
+      if (ts) stamps.push(ts);
+      const logField = DAILY_LOG_FIELD[key];
+      (row[logField] || []).forEach(e => stamps.push(e.ts));
+      stamps.forEach(stamp => {
+        const date = stamp.split(' ')[0];
+        if (!rekap[date]) rekap[date] = {};
+        if (!rekap[date][key]) rekap[date][key] = { mrs: [], names: {} };
+        const e = rekap[date][key];
+        if (!e.mrs.includes(row.mr)) { e.mrs.push(row.mr); e.names[row.mr] = row.nama; }
+      });
+    });
+  });
+  // Patient-level
+  CHECKLIST_PATIENT.forEach(key => {
+    Object.entries(patientChecklist).forEach(([mr, items]) => {
+      const ts = items[key];
+      if (ts) {
+        const date = ts.split(' ')[0];
+        if (!rekap[date]) rekap[date] = {};
+        if (!rekap[date][key]) rekap[date][key] = { mrs: [], names: {} };
+        const e = rekap[date][key];
+        if (!e.mrs.includes(mr)) {
+          e.mrs.push(mr);
+          const row = rows.find(r => r.mr === mr);
+          e.names[mr] = row ? row.nama : mr;
+        }
+      }
+    });
+  });
+  return rekap;
+}
+
+function renderRekap() {
+  const rekap = buildRekapData();
+  const dates = Object.keys(rekap).sort().reverse();
+  if (!dates.length) return '<div class="empty-state"><h2>No checklist data</h2><p>Check off items in the patient table and they will appear here.</p></div>';
+
+  const totals = {};
+  ALL_CHECKLIST.forEach(k => totals[k] = 0);
+  let uniqueMRS = new Set();
+  Object.values(rekap).forEach(day => {
+    Object.entries(day).forEach(([key, entry]) => {
+      if (totals[key] !== undefined) {
+        totals[key] += entry.mrs.length;
+        if (CHECKLIST_ROW.includes(key)) entry.mrs.forEach(m => uniqueMRS.add(m));
+      }
+    });
+  });
+
+  let html = '<div class="rekap-wrap"><div class="rekap-summary">';
+  html += `<div class="rekap-stat"><div class="num">${uniqueMRS.size}</div><div class="label">Total Patients</div></div>`;
+  ALL_CHECKLIST.forEach(key => {
+    html += `<div class="rekap-stat"><div class="num">${totals[key]}</div><div class="label">${CHECKLIST_LABELS[key]}</div></div>`;
+  });
+  html += '</div>';
+
+  html += '<div class="rekap-card"><h3>Breakdown by Date</h3>';
+  dates.forEach(date => {
+    html += `<div class="rekap-row"><div class="rekap-date">${formatDatePretty(date)}</div><div class="rekap-mrs">`;
+    Object.entries(rekap[date]).forEach(([key, entry]) => {
+      html += `<span style="font-weight:600;font-size:11px;color:#555;margin-right:4px;">${CHECKLIST_LABELS[key]} (${entry.mrs.length})</span>`;
+      html += `<button class="btn-copy" onclick="copyMRs('${entry.mrs.join('|')}')">📋 Copy MRs</button>`;
+      entry.mrs.forEach(mr => {
+        html += `<span class="rekap-mr-tag" title="${esc(entry.names[mr] || '')}" onclick="searchAndSwitch('${mr}')">${esc(mr)}</span>`;
+      });
+      html += '<br>';
+    });
+    html += '</div></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function formatDatePretty(s) { const p = s.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s; }
+
+function copyMRs(piped) {
+  const text = piped.split('|').join(', ');
+  copyToClipboard(text).then(() => toast(`Copied ${text.split(',').length} MR(s)`)).catch(() => toast('Copy failed'));
+}
+
+function searchAndSwitch(mr) {
+  document.getElementById('searchInput').value = mr;
+  searchQuery = mr.toLowerCase();
+  // Find which facility this MR is in and switch to it
+  const found = rows.find(r => r.mr === mr && !r.archived);
+  switchTab(found ? found.facility : 'nusin');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function cleanVal(v) { return v == null ? '' : String(v).trim(); }
+function normalizeHeader(h) { return h.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim(); }
+function parseDate(v) {
+  if (!v) return '';
+  v = String(v).trim();
+  // Split an optional time part ("2026-09-18 15:31:39" → date + time).
+  // Keeping the time lets the Tgl Reg column be sorted by time as well.
+  const sp = v.indexOf(' ');
+  const datePart = sp > 0 ? v.slice(0, sp) : v;
+  const timePart = sp > 0 ? v.slice(sp + 1) : '';
+  let date = '';
+  if (/^\d{5}$/.test(datePart)) {
+    const d = XLSX.SSF.parse_date_code(parseInt(datePart));
+    if (d) {
+      date = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+      if (d.H || d.M || d.S) {
+        const p = n => String(n).padStart(2, '0');
+        return `${date} ${p(d.H)}:${p(d.M)}:${p(d.S)}`;
+      }
+      return date;
+    }
+  } else if (datePart.includes('-')) {
+    const parts = datePart.split('-');
+    if (parts[0].length === 4) date = parts.join('-');
+    else if (parts[2] && parts[2].length === 4) date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+  } else if (datePart.includes('/')) {
+    const parts = datePart.split('/');
+    if (parts[0].length === 4) date = parts.join('-');
+    else if (parts[2] && parts[2].length === 4) date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  if (!date) return v;
+  // Append the time (HH:MM:SS or HH:MM) when the source cell has one.
+  const tm = timePart.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (tm) {
+    const p = n => String(n).padStart(2, '0');
+    return `${date} ${p(tm[1])}:${p(tm[2])}:${p(tm[3] || 0)}`;
+  }
+  return date;
+}
+function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Render ─────────────────────────────────────────────────────────────
+function render() {
+  const active = rows.filter(r => !r.archived);
+  const archived = rows.filter(r => r.archived);
+  document.getElementById('archiveBadge').textContent = `Archived: ${archived.length}`;
+  updateAsoAlertBanner();
+  buildTabs();
+
+  // Search count
+  const sc = document.getElementById('searchCount');
+  if (searchQuery) sc.textContent = `${rows.filter(matchesSearch).length} match(es)`;
+  else sc.textContent = '';
+
+  // Update filter button counts (scoped to current facility)
+  if (FACILITIES.includes(currentTab)) {
+    Object.keys(FILTER_IDS).forEach(key => {
+      const btn = document.getElementById(FILTER_IDS[key]);
+      const count = getUndoneCount(key, currentTab);
+      const span = btn.querySelector('.count');
+      if (span) span.textContent = ` (${count})`;
+      else btn.innerHTML = `${CHECKLIST_LABELS[key]} <span class="count">(${count})</span>`;
+    });
+  }
+
+  // Rekap tab
+  if (currentTab === 'rekap') {
+    const wrap = document.getElementById('tableWrap');
+    document.getElementById('emptyState').style.display = 'none';
+    wrap.style.display = 'block';
+    wrap.innerHTML = renderRekap();
+    return;
+  }
+
+  // Determine data source
+  let displayData;
+  let cols;
+  let isArchived = false;
+
+  if (currentTab === 'archived') {
+    isArchived = true;
+    cols = COLS_ARCHIVE;
+    // Apply archive filters
+    const facFilter = document.getElementById('archiveFacilityFilter').value;
+    const dateFrom = document.getElementById('archiveDateFrom').value;
+    const dateTo = document.getElementById('archiveDateTo').value;
+    displayData = getSorted(archived.filter(r => {
+      if (!matchesSearch(r)) return false;
+      if (facFilter !== 'all' && r.facility !== facFilter) return false;
+      // tglRegistrasi may carry a time part ("YYYY-MM-DD HH:MM:SS") —
+      // compare the date part only so a row on the boundary day is kept.
+      const regDate = String(r.tglRegistrasi || '').slice(0, 10);
+      if (dateFrom && regDate < dateFrom) return false;
+      if (dateTo && regDate > dateTo) return false;
+      return true;
+    }));
+  } else if (FACILITIES.includes(currentTab)) {
+    cols = currentTab === 'nusin' ? COLS_FULL : COLS_SHORT;
+    displayData = getSorted(active.filter(r => r.facility === currentTab && matchesSearch(r) && matchesFilters(r)));
+  } else {
+    return;
+  }
+
+  const wrap = document.getElementById('tableWrap');
+  const empty = document.getElementById('emptyState');
+
+  if (!rows.length) {
+    wrap.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  if (!displayData.length && (searchQuery || activeFilters.size || isArchived)) {
+    wrap.innerHTML = `<div class="empty-state"><h2>No matches</h2><p>No patients found. Try adjusting search or filters.</p></div>`;
+    wrap.style.display = 'block';
+    empty.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  wrap.style.display = 'block';
+
+  let totalW = 0;
+  cols.forEach(c => totalW += getColWidth(c.key));
+  let html = `<table class="main-table" style="width:${totalW}px"><colgroup>`;
+  cols.forEach(c => { html += `<col style="width:${getColWidth(c.key)}px">`; });
+  html += '</colgroup><thead><tr>';
+  cols.forEach(c => {
+    html += `<th onclick="sortRows('${c.key}')">${c.label}${sortArrow(c.key) ? `<span class="sort-arrow">${sortArrow(c.key)}</span>` : ''}<span class="col-resize" onmousedown="startColResize(event,'${c.key}')" onclick="event.stopPropagation()"></span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  const disabled = isArchived ? 'disabled' : '';
+  displayData.forEach(row => {
+    const pc = patientChecklist[row.mr] || {};
+    html += '<tr>';
+
+    cols.forEach(c => {
+      if (c.key === 'facility') {
+        html += `<td><span class="facility-badge ${row.facility}">${FACILITY_LABELS[row.facility] || row.facility}</span></td>`;
+      } else if (c.key === 'tglRegistrasi') {
+        // Full timestamp when present: date on line 1, time on line 2.
+        const v = String(row.tglRegistrasi || '');
+        const sp = v.indexOf(' ');
+        html += sp > 0
+          ? `<td><div>${esc(v.slice(0, sp))}</div><div class="tglreg-time">${esc(v.slice(sp + 1))}</div></td>`
+          : `<td>${esc(v)}</td>`;
+      } else if (c.key === 'dateAdded') {
+        const past = pastHistory(row);
+        const expanded = expandedRows.has(row.id);
+        html += `<td><span class="date-badge">${esc(row.dateAdded)}</span>`;
+        if (past.length > 0) {
+          html += ` <button class="btn-history" onclick="toggleHistory('${row.id}')">${expanded ? '▲' : '▼'} Riwayat (${past.length})</button>`;
+        }
+        html += '</td>';
+      } else if (c.key === 'checklist') {
+        html += '<td class="checklist-cell">';
+        const rc = row.checklist || {};
+        CHECKLIST_ROW.forEach(key => {
+          const val = rc[key]; const done = !!val;
+          html += `<div class="cl-item ${done ? 'done' : ''}">`;
+          html += `<label><input type="checkbox" ${done ? 'checked' : ''} ${disabled} onchange="toggleRowCheck('${row.id}','${key}')"> ${CHECKLIST_LABELS[key]}</label>`;
+          if (val) html += `<span class="cl-timestamp">${val}</span>`;
+          html += '</div>';
+        });
+        CHECKLIST_PATIENT.forEach(key => {
+          const val = pc[key]; const done = !!val;
+          html += `<div class="cl-item ${done ? 'done' : ''}">`;
+          html += `<label><input type="checkbox" ${done ? 'checked' : ''} ${disabled} onchange="togglePatientCheck('${row.mr}','${key}')"> ${CHECKLIST_LABELS[key]}</label>`;
+          if (val) html += `<span class="cl-timestamp">${val}</span>`;
+          html += '</div>';
+        });
+        html += '</td>';
+      } else if (c.key === 'hasilLab') {
+        const sum = labSummary(row.mr);
+        if (!sum) {
+          html += `<td class="lab-cell"><span class="lab-empty">—</span></td>`;
+        } else {
+          const { rep, abnormal, kritis } = sum;
+          const expanded = expandedLabRows.has(row.id);
+          html += `<td class="lab-cell">`;
+          if (kritis > 0) html += `<div class="lab-kritis-badge">⚠ Lab Kritis</div>`;
+          html += `<div class="lab-summary-line"><span class="lab-date">${esc(rep.maxDate)}</span>`;
+          html += ` <span class="lab-count">${rep.tests.length} tests · ${abnormal} abnormal${kritis ? ` · <span class="lab-kritis-text">${kritis} kritis</span>` : ''}</span></div>`;
+          html += `<button class="btn-lab" onclick="toggleLab('${row.id}')">${expanded ? '▲' : '▼'} Hasil Lab</button>`;
+          html += `</td>`;
+        }
+      } else if (c.key === 'aso') {
+        html += renderAsoCell(row, isArchived);
+      } else if (c.key === 'diagnosis' || c.key === 'operan' || c.key === 'terapi' || c.key === 'pharmacistNote') {
+        // Editable text cell: plain text by default (full content, no box);
+        // click to edit in place. Blur commits, Esc cancels. Archived rows are read-only.
+        const val = row[c.key] || '';
+        const isEditing = !isArchived && editingCell && editingCell.rowId === row.id && editingCell.key === c.key;
+        if (isEditing) {
+          html += `<td class="${c.cls || ''} edit-cell"><textarea class="edit-input" data-edit="${row.id}|${c.key}" placeholder="${c.label}..." onblur="commitEditCell('${row.id}','${c.key}', this.value)" onkeydown="if (event.key === 'Escape') cancelEditCell()">${esc(val)}</textarea></td>`;
+        } else {
+          const clickAttr = isArchived ? '' : ` onclick="startEditCell('${row.id}','${c.key}')"`;
+          html += `<td class="${c.cls || ''} edit-cell"${clickAttr}><div class="edit-text${val ? '' : ' empty'}">${val ? esc(val) : '—'}</div></td>`;
+        }
+      } else if (c.key === 'actions') {
+        html += '<td class="actions-cell">';
+        if (row.archived) {
+          html += `<button class="btn-unarchive" onclick="toggleArchive('${row.id}')">\u21A9 Unarchive</button>`;
+        } else {
+          html += `<button class="btn-archive" onclick="toggleArchive('${row.id}')">\uD83D\uDCE6 Archive</button>`;
+        }
+        html += '</td>';
+      } else {
+        html += `<td ${c.cls ? `class="${c.cls}"` : ''}>${esc(row[c.key] || '')}</td>`;
+      }
+    });
+
+    html += '</tr>';
+
+    // Expandable daily history (PAST days only — the current day is in the main row)
+    const pastEntries = pastHistory(row);
+    if (expandedRows.has(row.id) && pastEntries.length > 0) {
+      const hcols = ['date','tglRegistrasi','nama','umur','kamar','bed','dokter','diagnosis','operan','terapi'];
+      const hlabels = { date:'Tgl Input', tglRegistrasi:'Tgl Reg', nama:'Nama', umur:'Umur', kamar:'Kamar', bed:'Bed', dokter:'Dokter', diagnosis:'Diagnosis', operan:'Operan', terapi:'Terapi' };
+      let hh = '<tr class="history-row"><td colspan="' + cols.length + '"><div class="history-wrap">';
+      hh += `<div class="history-title">Riwayat harian — ${row.nama} (MR ${row.mr}) · ${pastEntries.length} hari</div>`;
+      hh += '<table class="history-table"><thead><tr>';
+      hcols.forEach(k => { hh += `<th>${hlabels[k]}</th>`; });
+      hh += '</tr></thead><tbody>';
+      pastEntries.forEach(e => {
+        hh += '<tr>';
+        hcols.forEach(k => {
+          const v = e[k] || '';
+          hh += k === 'date' ? `<td class="h-date">${esc(v)}</td>` : `<td class="${k==='diagnosis'||k==='operan'||k==='terapi' ? 'h-clin' : ''}">${esc(v)}</td>`;
+        });
+        hh += '</tr>';
+      });
+      hh += '</tbody></table></div></td></tr>';
+      html += hh;
+    }
+
+    // Expandable lab report (full table of tests)
+    const labSum = labSummary(row.mr);
+    if (expandedLabRows.has(row.id) && labSum) {
+      const { rep } = labSum;
+      let lh = '<tr class="lab-row"><td colspan="' + cols.length + '"><div class="lab-wrap">';
+      lh += `<div class="lab-title">Hasil Laboratorium — ${row.nama} (MR ${row.mr}) · ${rep.tests.length} test · loaded ${esc(rep.loadedAt || '')} <button class="btn-copy" onclick="copyLab('${row.id}')">📋 Copy</button></div>`;
+      // Filter bar: show only abnormal and/or kritis tests.
+      const nAbn = rep.tests.filter(t => t.abnormal).length;
+      const nKrit = rep.tests.filter(t => t.kritis).length;
+      lh += '<div class="lab-filter-bar">';
+      lh += `<button class="filter-btn ${labFilters.has('abnormal') ? 'active' : ''}" onclick="toggleLabFilter('abnormal')">Abnormal (${nAbn})</button>`;
+      lh += `<button class="filter-btn ${labFilters.has('kritis') ? 'active' : ''}" onclick="toggleLabFilter('kritis')">Kritis (${nKrit})</button>`;
+      lh += '</div>';
+      // Lab table: fixed column set (LAB_COLS) with a <colgroup> so every
+      // column is freely resizable (drag the right edge of a header). Widths
+      // persist in labColWidths (localStorage + master JSON).
+      let labTotalW = 0;
+      LAB_COLS.forEach(c => labTotalW += getLabColWidth(c.key));
+      lh += `<table class="lab-table" style="width:${labTotalW}px;table-layout:fixed"><colgroup>`;
+      LAB_COLS.forEach(c => { lh += `<col style="width:${getLabColWidth(c.key)}px">`; });
+      lh += '</colgroup><thead><tr>';
+      LAB_COLS.forEach(c => {
+        lh += `<th>${c.label}<span class="col-resize" onmousedown="startLabColResize(event,'${c.key}')" onclick="event.stopPropagation()"></span></th>`;
+      });
+      lh += '</tr></thead><tbody>';
+      // Section headers (like the Excel "Jenis:" rows) — shown once per section,
+      // and only for sections that still have at least one visible test.
+      let lastSection = null;
+      rep.tests.forEach(t => {
+        if (!labTestVisible(t)) return;
+        if (t.jenis !== lastSection) {
+          lh += `<tr class="lab-section-row"><td colspan="${LAB_COLS.length}">Jenis: ${esc(t.jenis)}</td></tr>`;
+          lastSection = t.jenis;
+        }
+        const valCls = t.kritis ? 'lab-val lab-kritis-val' : (t.abnormal ? 'lab-val lab-abnormal' : 'lab-val');
+        const lk = t.kritis ? ' <span class="lab-lk">LK</span>' : '';
+        lh += `<tr class="${t.kritis ? 'lab-row-kritis' : (t.abnormal ? 'lab-row-abnormal' : '')}">`;
+        lh += `<td>${esc(t.nama)}</td>`;
+        lh += `<td class="${valCls}">${esc(t.hasil)}${lk}</td>`;
+        lh += `<td class="lab-komentar">${esc(t.komentar || '')}</td>`;
+        lh += `<td>${esc(t.normal)}</td>`;
+        lh += `<td>${esc(t.satuan)}</td>`;
+        lh += `<td class="lab-ket">${esc(t.keterangan)}</td>`;
+        lh += `<td class="lab-tgl">${esc(t.tanggal)}</td>`;
+        lh += `</tr>`;
+      });
+      lh += '</tbody></table></div></td></tr>';
+      html += lh;
+    }
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  // Focus the in-place editor if a cell is being edited
+  if (editingCell) {
+    const ta = wrap.querySelector(`textarea.edit-input[data-edit="${editingCell.rowId}|${editingCell.key}"]`);
+    if (ta) {
+      ta.focus();
+      const len = ta.value.length;
+      ta.setSelectionRange(len, len);
+    }
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+loadColWidths();
+loadLabColWidths();
+buildTabs();
+render();
+if (isServerMode) {
+  // Served from the Rekap Visite server: load from the server and subscribe
+  // to live updates. The local-file "Open Master Data" button is not needed.
+  updateConnBadge();
+  const om = document.querySelector('button[onclick="openMasterData()"]');
+  if (om) om.style.display = 'none';
+  serverLoad().then(() => serverSubscribe()).catch(err => {
+    serverOnline = false; updateConnBadge();
+    toast('Could not load from server: ' + err.message);
+  });
+} else {
+  const cb = document.getElementById('cleanupBtn');
+  if (cb) cb.style.display = 'none'; // monthly job lives on the server
+  autoLoadMaster(); // auto-load last saved state (no-op if never saved here)
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# build / deps
+node_modules/
+dist/
+*.log
+
+# real patient data (PHI) — never commit
+data/
+master_data.json*
+rekap.db*
+*.sqlite
+*.sqlite3
+backups/
+
+# python test leftovers
+__pycache__/
+.pytest_cache/
+
+.env
+.DS_Store
