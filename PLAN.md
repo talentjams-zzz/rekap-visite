@@ -21,11 +21,12 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       incl. resistensi REPORT rows, eGFR/GD-POCT overrides, orphan-column
       guard), `apply` (chronological batch + latest-input rules). **57 Vitest
       tests green** — the brain, proven before any UI touches it.
-- [ ] **P3 — Frontend skeleton**: Vite + React + TS + Tailwind + TanStack
-      Table; facility tabs (Nusin/Melati/Sakura/Observasi) + Archived +
-      Rekap routes; connect to `/api/rows`; per-facility columns (Nusin gets
-      Observasi/Operan/Terapi), sorting (default Tgl Reg desc, time-aware),
-      resizable columns persisted in localStorage.
+- [x] **P3 — Frontend skeleton**: Vite + React + TS + Tailwind + TanStack
+      Table; `GET /api/rows` endpoint (status/facility filters, checklist
+      state, riwayat counts); facility tabs + Archived (Facility column) +
+      Rekap placeholder; per-facility columns (Nusin gets Diagnosis/Operan/
+      Terapi), sorting (default Tgl Reg desc, time-aware), resizable columns
+      persisted in localStorage. Playwright smoke: 55 active / 314 archived.
 - [ ] **P4 — Upload flow**: file picker → `POST /api/uploads` → result toast
       (added/merged/skipped/warnings); SSE subscription live-refreshes rows.
 - [ ] **P5 — Row interactions**: 7-item checklist with timestamps, note
