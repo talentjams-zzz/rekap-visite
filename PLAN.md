@@ -33,9 +33,12 @@ Every phase ends with: tests green + commit. v1 behavior is **frozen**
       (uploads + auto-migration); UI: upload bar + toasts + EventSource
       live refresh. UI round-trip verified: 20 active → upload → toast
       "+1 new · 20 archived" → table + tab counts update without reload.
-- [ ] **P5 — Row interactions**: 7-item checklist with timestamps, note
-      editing, archive/unarchive, riwayat expand (inline per-day table),
-      manual riwayat edit.
+- [x] **P5 — Row interactions**: 8-item checklist chips (3 row + 5
+      patient-level) with timestamps + optimistic updates, in-place editing
+      of diagnosis/operan/terapi/note (editable fields also recorded into
+      the current day's riwayat snapshot — v1 manual-riwayat regression),
+      archive/restore, riwayat expand (inline past-days table, fetched on
+      demand). Verified: UI round-trip + DB persistence (incl. snapshot).
 - [ ] **P6 — Lab**: per-MR lab upload, findings table with section headers +
       abnormal/kritis highlighting + komentar, copy-to-clipboard, ASO
       stop-date warnings + "ASO ⚠" filter, archived rows read-only.

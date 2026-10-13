@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchRows } from './api';
+import { fetchRows, patchRow, postPatientCheck, postRowCheck } from './api';
 import { PatientTable } from './components/PatientTable';
 import { TabBar } from './components/TabBar';
 import { UploadBar } from './components/UploadBar';
-import { FACILITIES, type RowDto, type Tab } from './types';
+import {
+  FACILITIES,
+  nowTs,
+  ROW_ITEM_KEYS,
+  type EditableKey,
+  type RowDto,
+  type Tab,
+} from './types';
 
 interface Toast {
   id: number;
@@ -44,6 +51,64 @@ export default function App() {
     return () => es.close();
   }, [reload]);
 
+  /** Optimistic local update across both lists; reload on API failure. */
+  const updateLocal = useCallback(
+    (fn: (rows: RowDto[]) => RowDto[]) => {
+      setActive((a) => fn(a));
+      setArchived((a) => fn(a));
+    },
+    [],
+  );
+
+  const handleToggleCheck = useCallback(
+    (row: RowDto, key: string) => {
+      const value = row.checklist[key] ? null : nowTs();
+      const isRowItem = ROW_ITEM_KEYS.has(key);
+      // Patient items are keyed by MR — update all rows sharing that MR.
+      updateLocal((rows) =>
+        rows.map((r) =>
+          (isRowItem ? r.id === row.id : r.mr === row.mr)
+            ? { ...r, checklist: { ...r.checklist, [key]: value } }
+            : r,
+        ),
+      );
+      const call = isRowItem
+        ? postRowCheck(row.id, key, value)
+        : postPatientCheck(row.mr, key, value);
+      call.catch((e: Error) => {
+        notify(`Check failed: ${e.message}`, true);
+        reload();
+      });
+    },
+    [notify, reload, updateLocal],
+  );
+
+  const handleEditField = useCallback(
+    (row: RowDto, key: EditableKey, value: string) => {
+      updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, [key]: value } : r)));
+      const patch = key === 'pharmacistNote' ? { note: value } : { [key]: value };
+      patchRow(row.id, patch).catch((e: Error) => {
+        notify(`Save failed: ${e.message}`, true);
+        reload();
+      });
+    },
+    [notify, reload, updateLocal],
+  );
+
+  const handleToggleArchive = useCallback(
+    (row: RowDto) => {
+      const archived = !row.archived;
+      updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, archived } : r)));
+      patchRow(row.id, { archived }).then(() => {
+        notify(`${row.nama || row.mr} ${archived ? 'archived' : 'returned to active'}`);
+      }).catch((e: Error) => {
+        notify(`Archive failed: ${e.message}`, true);
+        reload();
+      });
+    },
+    [notify, reload, updateLocal],
+  );
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { archived: archived.length };
     for (const f of FACILITIES) c[f] = active.filter((r) => r.facility === f).length;
@@ -78,6 +143,10 @@ export default function App() {
                 rows={shown}
                 facility={tab === 'archived' ? 'all' : tab}
                 showFacility={tab === 'archived'}
+                onToggleCheck={handleToggleCheck}
+                onEditField={handleEditField}
+                onToggleArchive={handleToggleArchive}
+                notify={notify}
               />
               <p className="mt-2 text-xs text-zinc-400">
                 {title} — {shown.length} row(s)

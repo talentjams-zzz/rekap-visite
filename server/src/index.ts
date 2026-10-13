@@ -12,6 +12,7 @@ import {
   runMigration,
   type V1Master,
 } from './migrate.js';
+import { registerInteractions } from './interactions.js';
 import { registerUploads } from './uploads.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ const schemaSql = readFileSync(path.join(root, 'server', 'schema.sql'), 'utf8');
 const events = registerEvents(app);
 await app.register(fastifyMultipart, { limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
 registerUploads(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
+registerInteractions(app, db, () => events.broadcast('change', { at: new Date().toISOString() }));
 
 function loadMaster(): V1Master | null {
   if (!existsSync(masterFile)) return null;
