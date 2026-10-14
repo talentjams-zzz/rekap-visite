@@ -2,6 +2,14 @@
 REM Start Rekap Visite v2. Keep this window open while the app is running.
 cd /d "%~dp0\.."
 
+if not exist server\dist\index.js (
+  echo ERROR: server\dist\index.js not found in %cd%
+  echo The app has not been built here yet. Run  scripts\windows-setup.bat  first,
+  echo then run this script again.
+  pause
+  exit /b 1
+)
+
 REM ---------------------------------------------------------------------------
 REM POINT THIS AT THE SAME master_data.json YOUR V1 USES (one source of truth).
 REM Example:  set REKAP_MASTER=C:\rekap-v1\master_data.json
