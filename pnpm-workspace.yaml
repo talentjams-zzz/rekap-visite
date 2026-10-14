@@ -3,3 +3,8 @@ packages:
   - server
   - web
   - e2e
+# Approve postinstall build scripts declaratively (pnpm >= 10 blocks them by
+# default; without this, `pnpm install` errors with ERR_PNPM_IGNORED_BUILDS).
+# esbuild is the only dependency that needs it.
+onlyBuiltDependencies:
+  - esbuild
