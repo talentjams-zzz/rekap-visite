@@ -54,12 +54,12 @@ describe('writeBackToV1', () => {
     expect(rep.ok).toBe(true);
   });
 
-  it('round-trips a v1 file: version bumps, legacy + UI state preserved', () => {
+  it('round-trips a v1 file: version bumps, legacy + UI state preserved', async () => {
     // A v2-side change: a patient-level check not present before.
     db.prepare('INSERT OR REPLACE INTO patient_checklist (mr, item_key, checked_at) VALUES (?, ?, ?)')
       .run('1001', 'pto', '2026-09-19 10:00:00');
 
-    const res = writeBackToV1(db, file);
+    const res = await writeBackToV1(db, file);
     expect(res?.version).toBe(62);
 
     const out = JSON.parse(readFile(file, 'utf8'));
@@ -100,10 +100,10 @@ describe('writeBackToV1', () => {
     expect(isSourceNewer(db, out as never)).toBe(true);
   });
 
-  it('returns null for a missing file (never creates one)', () => {
+  it('returns null for a missing file (never creates one)', async () => {
     const missing = path.join(dir, 'nope.json');
     expect(existsSync(missing)).toBe(false);
-    expect(writeBackToV1(db, missing)).toBeNull();
+    await expect(writeBackToV1(db, missing)).resolves.toBeNull();
     expect(existsSync(missing)).toBe(false);
   });
 });

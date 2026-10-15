@@ -12,7 +12,7 @@
 //    past-day checklist history from v1's point of view.
 //  - colWidths / labColWidths (v1 UI state) are carried through unchanged.
 //  - atomic write (tmp + rename) so v1 never reads a half-written file.
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -45,13 +45,18 @@ function parseJsonArray<T>(raw: string | null | undefined, fallback: T[]): T[] {
   }
 }
 
-export function writeBackToV1(db: DatabaseSync, masterFile: string): WriteBackResult | null {
-  if (!existsSync(masterFile)) return null;
+// ASYNC on purpose: the file write is multi-MB and, on Windows, antivirus
+// real-time protection can stall a synchronous write for seconds — which
+// would block the event loop and freeze every in-flight HTTP request.
+export async function writeBackToV1(
+  db: DatabaseSync,
+  masterFile: string,
+): Promise<WriteBackResult | null> {
   let existing: V1Like;
   try {
-    existing = JSON.parse(readFileSync(masterFile, 'utf8')) as V1Like;
+    existing = JSON.parse(await readFile(masterFile, 'utf8')) as V1Like;
   } catch {
-    return null; // unreadable file — never clobber what we can't parse
+    return null; // missing/unreadable file — never clobber what we can't parse
   }
 
   const legacyByRowId = new Map<string, Record<string, unknown>>(
@@ -172,8 +177,8 @@ export function writeBackToV1(db: DatabaseSync, masterFile: string): WriteBackRe
   };
 
   const tmp = path.join(path.dirname(masterFile), `.${path.basename(masterFile)}.v2tmp`);
-  writeFileSync(tmp, JSON.stringify(out, null, 2), 'utf8');
-  renameSync(tmp, masterFile);
+  await writeFile(tmp, JSON.stringify(out, null, 2), 'utf8');
+  await rename(tmp, masterFile);
 
   // Keep the poll gate in sync: the file now equals the DB, at this version.
   db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run('source_version', String(version));

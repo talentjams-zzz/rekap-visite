@@ -1,6 +1,10 @@
 import type { AsoMed, HistoryEntry, LabReport, RekapData, RowDto } from './types';
 
-const READ_TIMEOUT_MS = 15000;
+// Generous on purpose: the archived list is a ~1 MB payload and on a slow
+// LAN/Tailscale link (or a briefly stalled Windows box) that can take real
+// time. 30 s still fails a truly dead connection; instant failure would
+// just flash the banner on slow-but-working links.
+const READ_TIMEOUT_MS = 30000;
 
 export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]> {
   // A hung connection must fail fast (recoverable error) instead of leaving

@@ -37,14 +37,18 @@ const events = registerEvents(app);
 await app.register(fastifyMultipart, { limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
 // Every v2 change: persist to v1's master_data.json (so the frozen v1
 // fallback always sees current state), then broadcast to live clients.
+// Fire-and-forget: async (file I/O must not block the event loop) and
+// never awaited by request handlers.
 function commit(reason?: string): void {
-  try {
-    const res = writeBackToV1(db, masterFile);
-    if (res) app.log.info({ reason, version: res.version, rows: res.rows }, 'write-back to v1 master file');
-  } catch (e) {
-    app.log.error({ err: e, reason }, 'write-back to v1 master file FAILED (DB state is authoritative)');
-  }
-  events.broadcast('change', { at: new Date().toISOString(), reason });
+  void (async () => {
+    try {
+      const res = await writeBackToV1(db, masterFile);
+      if (res) app.log.info({ reason, version: res.version, rows: res.rows }, 'write-back to v1 master file');
+    } catch (e) {
+      app.log.error({ err: e, reason }, 'write-back to v1 master file FAILED (DB state is authoritative)');
+    }
+    events.broadcast('change', { at: new Date().toISOString(), reason });
+  })();
 }
 
 registerUploads(app, db, () => commit('upload'));
