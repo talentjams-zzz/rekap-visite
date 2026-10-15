@@ -1,9 +1,19 @@
 import type { AsoMed, HistoryEntry, LabReport, RekapData, RowDto } from './types';
 
+const READ_TIMEOUT_MS = 15000;
+
 export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]> {
-  const r = await fetch(`/api/rows?status=${status}`);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return (await r.json()) as RowDto[];
+  // A hung connection must fail fast (recoverable error) instead of leaving
+  // the page in a pending state forever.
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), READ_TIMEOUT_MS);
+  try {
+    const r = await fetch(`/api/rows?status=${status}`, { signal: ctrl.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return (await r.json()) as RowDto[];
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 /** Thrown on HTTP 409 — the row changed on another device; caller reloads. */

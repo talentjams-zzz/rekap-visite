@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ConflictError,
   fetchRows,
@@ -91,13 +91,22 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
   }, []);
 
+  // Stale-response guard: a slow response must never clobber newer state
+  // (SSE reloads overlap with manual ones — the last one started wins).
+  const loadSeq = useRef(0);
+
   const reload = useCallback(() => {
+    const seq = ++loadSeq.current;
     Promise.all([fetchRows('active'), fetchRows('archived')])
       .then(([a, b]) => {
+        if (seq !== loadSeq.current) return; // superseded by a newer load
         setActive(a);
         setArchived(b);
+        setError(null); // a successful load always clears the banner
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => {
+        if (seq === loadSeq.current) setError(String(e));
+      });
   }, []);
 
   useEffect(() => {
@@ -108,6 +117,25 @@ export default function App() {
     const es = new EventSource('/api/events');
     es.addEventListener('change', reload);
     return () => es.close();
+  }, [reload]);
+
+  // Self-healing: a transient failure ("TypeError: Failed to fetch" after a
+  // network hiccup, laptop sleep, server restart) must not blank the page.
+  // While the error banner is up, retry every 5 s until a load succeeds.
+  useEffect(() => {
+    if (!error) return;
+    const t = setInterval(reload, 5000);
+    return () => clearInterval(t);
+  }, [error, reload]);
+
+  // Also refresh when the tab is shown again — backgrounded tabs die on
+  // stale connections after sleep/network changes.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') reload();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, [reload]);
 
   /** Optimistic local update across both lists; reload on API failure. */
@@ -318,14 +346,28 @@ export default function App() {
           <TabBar tab={tab} onChange={setTab} counts={counts} />
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          {error && <p className="mb-1 shrink-0 rounded bg-(--danger)/10 p-2 text-(--danger)">API error: {error}</p>}
+          {/* Transient API errors keep the last data visible (no dead page);
+              the banner offers an instant retry and auto-retry runs above. */}
+          {error && (
+            <p className="mb-1 flex shrink-0 items-center gap-2 rounded bg-(--danger)/10 px-2 py-1 text-xs text-(--danger)">
+              <span className="truncate">
+                ⚠ API error: {error} — retrying every 5 s
+              </span>
+              <button
+                className="shrink-0 rounded border border-(--danger) px-2 py-0.5 font-semibold transition-colors hover:bg-(--danger) hover:text-white"
+                onClick={reload}
+              >
+                Retry now
+              </button>
+            </p>
+          )}
           {loading && <p className="shrink-0 text-(--text2)">Loading…</p>}
-          {!loading && !error && tab === 'rekap' && (
+          {!loading && tab === 'rekap' && (
             <div className="min-h-0 flex-1 overflow-y-auto">
               <Rekap onOpenMR={(_mr, t) => setTab(t)} />
             </div>
           )}
-          {!loading && !error && tab !== 'rekap' && (
+          {!loading && tab !== 'rekap' && (
             <div className="flex min-h-0 flex-1 flex-col">
               {tab !== 'archived' && (
                 // V1 filter bar (frozen look): "Filter undone:" + pill buttons;

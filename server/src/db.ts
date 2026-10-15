@@ -12,6 +12,9 @@ export function openDb(file: string): DatabaseSync {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
+  // Wait up to 5 s for a locked database instead of failing instantly
+  // (guards against a second process touching the same file).
+  db.exec('PRAGMA busy_timeout = 5000;');
   const schema = readFileSync(path.join(here, '..', 'schema.sql'), 'utf8');
   db.exec(schema);
   // Lightweight column upgrades for databases created before a column existed

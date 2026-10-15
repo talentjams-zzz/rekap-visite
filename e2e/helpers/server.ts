@@ -16,8 +16,22 @@ export interface Scratch {
 
 let nextPort = 8810;
 
+/** A crashed dev script can leave a scratch server behind; never talk to a
+ *  stranger: take the next free port and verify the server's identity. */
+async function portFree(port: number): Promise<boolean> {
+  try {
+    const s = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      signal: AbortSignal.timeout(300),
+    });
+    return !s.ok;
+  } catch {
+    return true; // nothing listening (or no HTTP) — free
+  }
+}
+
 export async function startScratchServer(seed?: Record<string, unknown>): Promise<Scratch> {
-  const port = nextPort++;
+  let port = nextPort++;
+  while (!(await portFree(port))) port = nextPort++;
   const dir = mkdtempSync(path.join(os.tmpdir(), 'rekap-e2e-'));
   writeFileSync(
     path.join(dir, 'master.json'),
@@ -63,6 +77,16 @@ export async function startScratchServer(seed?: Record<string, unknown>): Promis
   if (!up) {
     child.kill();
     throw new Error(`server did not open port ${port} in time:\n${stderr.slice(0, 800)}`);
+  }
+  // Identity check: the health response must point at OUR temp files. A
+  // mismatch means some other (zombie) server owns the port.
+  const h = await fetch(`http://localhost:${port}/api/health`).then((r) => r.json());
+  if (h?.dbFile !== path.join(dir, 'rekap.db')) {
+    child.kill('SIGKILL');
+    throw new Error(
+      `port ${port} is owned by another server (dbFile=${h?.dbFile}). ` +
+        'Kill the stray node process (ss -ltnp | grep 88) and re-run.',
+    );
   }
   return {
     base: `http://localhost:${port}`,
