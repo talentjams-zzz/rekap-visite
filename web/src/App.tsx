@@ -223,24 +223,71 @@ export default function App() {
     [notify, reload, updateLocal],
   );
 
+  // ── ASO writes: debounce + per-row serialization ───────────────────────
+  // Saving per keystroke (the old behavior) meant fast typing sent several
+  // PATCHes with the SAME row rev; the second hit a 409 from the first and
+  // the UI said "Row changed on another device" — a self-inflicted conflict.
+  // Now: local state updates instantly (optimistic), the server save is
+  // debounced (quiet period), same-row saves are serialized, and each send
+  // uses the newest known rev (kept in a ref, updated synchronously from
+  // the previous response — React state can't be trusted mid-chain). A 409
+  // can only come from a genuine cross-device change now.
+  const ASO_SAVE_MS = 500;
+  const asoTimer = useRef(new Map<string, number>());
+  const asoChain = useRef(new Map<string, Promise<unknown>>());
+  const asoRev = useRef(new Map<string, number>());
+  const asoDead = useRef(new Set<string>()); // row: last save 409'd, skip queued saves
+  const rowsRef = useRef<RowDto[]>([]);
+  useEffect(() => {
+    rowsRef.current = [...active, ...archived];
+  }, [active, archived]);
+
+  const flushAso = useCallback(
+    (rowId: string, aso: AsoMed[]) => {
+      if (asoDead.current.has(rowId)) return; // a real conflict reloaded; drop stale saves
+      const prev = asoChain.current.get(rowId) ?? Promise.resolve();
+      const task = prev
+        .then(async () => {
+          const row = rowsRef.current.find((r) => r.id === rowId);
+          const rev = asoRev.current.get(rowId) ?? row?.rev;
+          const res = await patchAso(rowId, aso, rev);
+          if (typeof res.rev === 'number') {
+            asoRev.current.set(rowId, res.rev);
+            const nr = res.rev;
+            updateLocal((rows) => rows.map((r) => (r.id === rowId ? { ...r, rev: nr } : r)));
+          }
+        })
+        .catch((e: Error) => {
+          asoDead.current.add(rowId);
+          asoChain.current.delete(rowId);
+          asoRev.current.delete(rowId);
+          if (e instanceof ConflictError) {
+            notify('Row changed on another device — reloading', true);
+          } else {
+            notify(`ASO save failed: ${e.message}`, true);
+          }
+          reload();
+        });
+      asoChain.current.set(rowId, task.catch(() => undefined));
+    },
+    [notify, reload, updateLocal],
+  );
+
   const handleAsoChange = useCallback(
     (row: RowDto, aso: AsoMed[]) => {
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, aso } : r)));
-      patchAso(row.id, aso, row.rev).then((res) => {
-        if (typeof res.rev === 'number') {
-          const nr = res.rev;
-          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
-        }
-      }).catch((e: Error) => {
-        if (e instanceof ConflictError) {
-          notify('Row changed on another device — reloading', true);
-        } else {
-          notify(`ASO save failed: ${e.message}`, true);
-        }
-        reload();
-      });
+      asoDead.current.delete(row.id); // user is typing again — clear any conflict flag
+      const prev = asoTimer.current.get(row.id);
+      if (prev) window.clearTimeout(prev);
+      asoTimer.current.set(
+        row.id,
+        window.setTimeout(() => {
+          asoTimer.current.delete(row.id);
+          flushAso(row.id, aso); // `aso` is the latest local state (each keystroke reschedules)
+        }, ASO_SAVE_MS),
+      );
     },
-    [notify, reload, updateLocal],
+    [flushAso, updateLocal],
   );
 
   // v1 🧹 Monthly Cleanup: back up ALL data, then remove archived patients.

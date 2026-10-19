@@ -4,6 +4,7 @@
 import { test, expect } from '../helpers/fixture.js';
 import { buildRegistryFile } from '../helpers/xlsx.js';
 import { waitRows, rowFor, uploadFiles } from '../helpers/ui.js';
+import { apiRows } from '../helpers/server.js';
 
 const MR = '770001';
 
@@ -74,4 +75,43 @@ test('aso: future stopDate is not due; removed med decrements banner', async ({ 
   await row.locator('button[title="Remove"]').click();
   await page.waitForTimeout(400);
   expect(await row.locator("input[placeholder='Med name']").count()).toBe(0);
+});
+
+// Regression: the ASO editor used to PATCH on every keystroke with the rev
+// from render time — fast typing produced overlapping writes with the same
+// rev, the second 409'd against the first, and the UI showed
+// "Row changed on another device" while the user was just typing. Saves are
+// now debounced (500 ms) and serialized per row with the newest rev, so
+// rapid typing must produce one clean save and NO conflict banner.
+test('aso: rapid typing does not self-conflict (one clean save, no banner)', async ({
+  server,
+  page,
+}) => {
+  const { base, dir } = server;
+  const reg = buildRegistryFile(dir, 'nusin', '12-10-26', [
+    { mr: MR, nama: 'FASTTYPE', tglReg: '2026-10-12 08:00:00' },
+  ]);
+  await page.goto(base, { waitUntil: 'load' });
+  await uploadFiles(page, [reg]);
+  await waitRows(base, 'active', (r) => r.some((x) => x.mr === MR));
+
+  const row = rowFor(page, MR);
+  await row.locator('button', { hasText: '+ Add med' }).click();
+  const nameInput = row.locator("input[placeholder='Med name']");
+  await nameInput.click();
+  // Faster than the 500 ms debounce: every keystroke is a local change.
+  await page.keyboard.type('ketorolac', { delay: 40 });
+  await row.locator("input[type='date']").fill('2026-10-01');
+
+  // Wait out the debounce + the save.
+  await page.waitForTimeout(2500);
+
+  // No self-conflict, no dead API state.
+  expect(await page.locator('text=another device').count()).toBe(0);
+  expect(await page.locator('text=/API error/').count()).toBe(0);
+
+  // The FULL typed value persisted (a stale reload would truncate it).
+  const rows = await apiRows(base, 'active');
+  const p = rows.find((x: any) => x.mr === MR);
+  expect(p.aso[0].name).toBe('ketorolac');
 });
