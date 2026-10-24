@@ -72,7 +72,8 @@ export async function writeBackToV1(
     .all() as Record<string, unknown>[];
 
   const histStmt = db.prepare(
-    `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi
+    `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap,
+            pharmacist_note, visite, pto, konseling, rekonsiliasi_obat, penelusuran_obat
      FROM patient_days WHERE patient_id = ? AND report_date != ? ORDER BY report_date DESC`,
   );
   const chkStmt = db.prepare('SELECT item_key, checked_at FROM row_checklist WHERE patient_id = ?');
@@ -101,6 +102,13 @@ export async function writeBackToV1(
       operan: (h.operan as string) ?? null,
       terapi: (h.terapi as string) ?? null,
       soap: (h.soap as string) ?? null,
+      // v2-only riwayat fields (readmission snapshot); v1 ignores unknown keys
+      note: (h.pharmacist_note as string) ?? null,
+      visite: (h.visite as string) ?? null,
+      pto: (h.pto as string) ?? null,
+      konseling: (h.konseling as string) ?? null,
+      rekonsiliasi_obat: (h.rekonsiliasi_obat as string) ?? null,
+      penelusuran_obat: (h.penelusuran_obat as string) ?? null,
     }));
 
     const aso = parseJsonArray<unknown>(p.aso_json as string | null, []);

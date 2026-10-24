@@ -215,7 +215,8 @@ export function registerInteractions(
     }
     const days = db
       .prepare(
-        `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap
+        `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap,
+                pharmacist_note, visite, pto, konseling, rekonsiliasi_obat, penelusuran_obat
          FROM patient_days
          WHERE patient_id = ? AND report_date != ?
          ORDER BY report_date DESC`,
@@ -233,6 +234,12 @@ export function registerInteractions(
       operan: (d.operan as string) ?? null,
       terapi: (d.terapi as string) ?? null,
       soap: (d.soap as string) ?? null,
+      note: (d.pharmacist_note as string) ?? null,
+      visite: (d.visite as string) ?? null,
+      pto: (d.pto as string) ?? null,
+      konseling: (d.konseling as string) ?? null,
+      rekonsiliasi_obat: (d.rekonsiliasi_obat as string) ?? null,
+      penelusuran_obat: (d.penelusuran_obat as string) ?? null,
     }));
   });
 }

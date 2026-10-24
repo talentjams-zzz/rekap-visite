@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS patient_days (
   operan          TEXT,
   terapi          TEXT,
   soap            TEXT,                         -- that day's SOAP (moved here when the day advances)
+  pharmacist_note   TEXT,                         -- v2: note snapshotted on readmission
+  visite            TEXT,                         -- v2: per-visit patient checklist state that day
+  pto               TEXT,
+  konseling         TEXT,
+  rekonsiliasi_obat TEXT,
+  penelusuran_obat  TEXT,
   UNIQUE (patient_id, report_date)
 );
 CREATE INDEX IF NOT EXISTS idx_patient_days_patient ON patient_days (patient_id);

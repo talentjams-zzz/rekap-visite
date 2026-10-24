@@ -94,6 +94,27 @@ export function registerUploads(
     const result = applyFiles(state, parsed, nowTs);
     saveWorldState(db, state);
 
+    // Readmission follow-up (see core/parsers.ts): the core already
+    // snapshotted + cleared the ROW-level episode fields (D/O/T, note,
+    // SOAP, ASO) into the old episode's last riwayat day. The patient-level
+    // checklist is keyed by MR OUTSIDE WorldState (direct-write lifecycle,
+    // see patient_checklist), so its per-episode snapshot + reset happens
+    // here: copy the current ticks into the old episode's last day (v2-only
+    // riwayat columns), then clear them for the new episode. COALESCE so a
+    // missing patient_checklist row never clobbers an existing snapshot.
+    for (const ev of result.readmissions) {
+      db.prepare(
+        `UPDATE patient_days SET
+           visite            = COALESCE((SELECT checked_at FROM patient_checklist WHERE mr = ? AND item_key = 'visite'), visite),
+           pto               = COALESCE((SELECT checked_at FROM patient_checklist WHERE mr = ? AND item_key = 'pto'), pto),
+           konseling         = COALESCE((SELECT checked_at FROM patient_checklist WHERE mr = ? AND item_key = 'konseling'), konseling),
+           rekonsiliasi_obat = COALESCE((SELECT checked_at FROM patient_checklist WHERE mr = ? AND item_key = 'rekonsiliasi_obat'), rekonsiliasi_obat),
+           penelusuran_obat  = COALESCE((SELECT checked_at FROM patient_checklist WHERE mr = ? AND item_key = 'penelusuran_obat'), penelusuran_obat)
+         WHERE patient_id = ? AND report_date = ?`,
+      ).run(ev.mr, ev.mr, ev.mr, ev.mr, ev.mr, ev.rowId, ev.episodeEnd);
+      db.prepare('UPDATE patient_checklist SET checked_at = NULL WHERE mr = ?').run(ev.mr);
+    }
+
     const insU = db.prepare(
       'INSERT INTO uploads (filename, facility, report_date, sha256, uploaded_at) VALUES (?,?,?,?,?)',
     );
@@ -111,6 +132,7 @@ export function registerUploads(
       files: parsed.length,
       added: result.added,
       merged: result.merged,
+      readmissions: result.readmissions.length,
       skipped,
       warnings: result.warnings,
       sync: result.sync,

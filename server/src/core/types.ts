@@ -18,6 +18,15 @@ export const DAILY_LOG_FIELD: Record<string, 'telaahLog' | 'catatanLog' | 'pioLo
 export const HISTORY_FIELDS = [
   'tglRegistrasi', 'nama', 'umur', 'kamar', 'bed',
   'dokter', 'diagnosis', 'operan', 'terapi', 'soap',
+  // v2-only riwayat fields (v1 format has none of these; the v1 UI ignores
+  // them): the pharmacist note and the per-visit patient checklist items,
+  // snapshotted on readmission so a cleared episode keeps its history.
+  'note', 'visite', 'pto', 'konseling', 'rekonsiliasi_obat', 'penelusuran_obat',
+] as const;
+
+// Per-visit (episode) patient-level checklist items, keyed by MR in the DB.
+export const PATIENT_ITEM_KEYS = [
+  'visite', 'pto', 'konseling', 'rekonsiliasi_obat', 'penelusuran_obat',
 ] as const;
 
 export interface HistoryEntry {
@@ -32,6 +41,21 @@ export interface HistoryEntry {
   operan?: string;
   terapi?: string;
   soap?: string;
+  note?: string;
+  visite?: string;
+  pto?: string;
+  konseling?: string;
+  rekonsiliasi_obat?: string;
+  penelusuran_obat?: string;
+}
+
+/** A confirmed new treatment episode (readmission) detected during a merge.
+ *  episodeEnd = the old episode's last report date (where its state was
+ *  snapshotted before the current-treatment fields were cleared). */
+export interface ReadmissionEvent {
+  rowId: string;
+  mr: string;
+  episodeEnd: string;
 }
 
 export interface LogEntry {
@@ -101,6 +125,7 @@ export interface MergeResult {
   added: number;
   merged: number;
   warnings: string[];
+  readmissions: ReadmissionEvent[];
 }
 
 export interface BatchResult extends MergeResult {

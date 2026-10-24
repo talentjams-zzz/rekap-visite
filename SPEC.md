@@ -95,6 +95,28 @@ untouched until E2E passes on v2.
 5. Clean project structure ready to grow (auth, audit log, PWA are
    **deferred**, not in v2 scope).
 
+### v2 behavior additions (deliberate deviations from frozen v1)
+- **SOAP column** — per-day free text after the Pharmacist Note; resets to
+  blank when a new day's file arrives; the previous day's value moves to
+  Riwayat (a new `patient_days.soap` column).
+- **Readmission episode reset** — v1 (and pre-fix v2) kept showing the
+  previous stay's treatment on a readmitted patient. v2 treats a *changed
+  registration date* in the registry file as a new treatment episode:
+  - snapshot first: the old episode's final D/O/T + note + SOAP + patient-
+    checklist ticks are written to its last Riwayat day (v2-only
+    `patient_days` columns; v1 ignores unknown history keys);
+  - then clear: diagnosis/operan/terapi/pharmacist note/SOAP/ASO on the row,
+    and the 5 patient-level checklist items for that MR;
+  - trigger rule (audit of 369 real patients, 627 day transitions): reg-date
+    change occurred 3x — always with long absences, never on a 1-day gap;
+    long gaps with an UNCHANGED reg date (41x) are missing-facility-file
+    artifacts. So the reg-date change — not the archive flag, not the gap —
+    is the trigger; a blank reg date is "no signal" and never resets;
+  - handover (operan) files carry no reg date and can never trigger it;
+    manual unarchive from the UI also does not trigger it.
+  - Catatan Pengobatan (row item) is NOT reset (v1: one-time per-patient
+    task); labs are kept (latest-report reference data).
+
 ## Testing
 - **Unit (Vitest)**: filename → facility/date parsing; registry/handover/lab
   parsers; merge rules (latest-file-wins, riwayat append, same-day

@@ -64,7 +64,7 @@ export function parseRegistry(
   reportDate: string,
   inputTs: string,
 ): MergeResult {
-  const result: MergeResult = { added: 0, merged: 0, warnings: [] };
+  const result: MergeResult = { added: 0, merged: 0, warnings: [], readmissions: [] };
   const headerRow = findHeaderRow(sheet, ['rekam']);
   if (headerRow < 0) return result;
 
@@ -99,6 +99,37 @@ export function parseRegistry(
     // into the existing zero-padded row instead of creating a duplicate.
     const { row: existing, canonicalMr } = findRowByMR(state.rows, mr, facility);
     if (existing) {
+      // READMISSION (v2 feature): the file's registration DATE differs from
+      // the stored one => a new treatment episode, not a continuing stay.
+      // Audit of real data: reg-date changes are rare (3/627 day
+      // transitions) and always coincide with long absences, while long
+      // gaps with an UNCHANGED date are missing-facility-file artifacts —
+      // so the reg-date change (not the gap, not the archive flag) is the
+      // trigger. Snapshot the old episode's current-state fields into its
+      // last riwayat day (so nothing cleared is lost), then start fresh.
+      // A blank reg in the file is "no signal" and never triggers a reset.
+      const newReg = tglReg.slice(0, 10);
+      const oldReg = (existing.tglRegistrasi || '').slice(0, 10);
+      if (newReg && oldReg && newReg !== oldReg) {
+        recordHistory(existing, existing.dateAdded, {
+          diagnosis: existing.diagnosis,
+          operan: existing.operan,
+          terapi: existing.terapi,
+          soap: existing.soap,
+          note: existing.pharmacistNote,
+        });
+        existing.diagnosis = '';
+        existing.operan = '';
+        existing.terapi = '';
+        existing.pharmacistNote = '';
+        existing.soap = '';
+        existing.aso = []; // previous stay's meds-to-stop must not stay "due"
+        result.readmissions.push({
+          rowId: existing.id,
+          mr: existing.mr,
+          episodeEnd: existing.dateAdded,
+        });
+      }
       // Latest file wins for every data field; note/archive are untouched.
       // Telaah Resep (daily task) is cleared when the day advances.
       touchRowDate(existing, reportDate, inputTs);
@@ -208,7 +239,7 @@ export function parseHandover(
   inputTs: string,
   filename: string,
 ): MergeResult {
-  const result: MergeResult = { added: 0, merged: 0, warnings: [] };
+  const result: MergeResult = { added: 0, merged: 0, warnings: [], readmissions: [] };
   for (const { name: sheetName, rows: sheet } of sheets) {
     const headerRow = findHeaderRow(sheet, ['medrec']);
     if (headerRow < 0) continue;

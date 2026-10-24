@@ -20,6 +20,7 @@ export function applyFiles(state: WorldState, files: ParsedFile[], nowTs: string
     added: 0,
     merged: 0,
     warnings: [],
+    readmissions: [],
     sync: { archived: 0, unarchived: 0 },
   };
 
@@ -37,6 +38,7 @@ export function applyFiles(state: WorldState, files: ParsedFile[], nowTs: string
     batch.added += res.added;
     batch.merged += res.merged;
     batch.warnings.push(...res.warnings);
+    batch.readmissions.push(...res.readmissions);
   }
 
   batch.sync = syncArchiveState(state, nowTs);

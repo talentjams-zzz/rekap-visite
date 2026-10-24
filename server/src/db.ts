@@ -34,5 +34,17 @@ export function openDb(file: string): DatabaseSync {
   if (!dayCols.some((c) => c.name === 'soap')) {
     db.exec('ALTER TABLE patient_days ADD COLUMN soap TEXT');
   }
+  // v2 readmission snapshots: note + per-visit patient checklist per day.
+  const dayNewCols: Array<[string, string]> = [
+    ['pharmacist_note', 'ALTER TABLE patient_days ADD COLUMN pharmacist_note TEXT'],
+    ['visite', 'ALTER TABLE patient_days ADD COLUMN visite TEXT'],
+    ['pto', 'ALTER TABLE patient_days ADD COLUMN pto TEXT'],
+    ['konseling', 'ALTER TABLE patient_days ADD COLUMN konseling TEXT'],
+    ['rekonsiliasi_obat', 'ALTER TABLE patient_days ADD COLUMN rekonsiliasi_obat TEXT'],
+    ['penelusuran_obat', 'ALTER TABLE patient_days ADD COLUMN penelusuran_obat TEXT'],
+  ];
+  for (const [col, ddl] of dayNewCols) {
+    if (!dayCols.some((c) => c.name === col)) db.exec(ddl);
+  }
   return db;
 }

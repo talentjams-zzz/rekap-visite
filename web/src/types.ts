@@ -107,6 +107,13 @@ export interface HistoryEntry {
   operan: string | null;
   terapi: string | null;
   soap: string | null;
+  // v2 readmission snapshots (a cleared episode's history):
+  note: string | null;
+  visite: string | null;
+  pto: string | null;
+  konseling: string | null;
+  rekonsiliasi_obat: string | null;
+  penelusuran_obat: string | null;
 }
 
 /** Client-side 'YYYY-MM-DD HH:MM:SS' (v1 nowDT()). */
