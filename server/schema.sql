@@ -82,7 +82,24 @@ CREATE TABLE IF NOT EXISTS labs (
   filename    TEXT,
   loaded_at   TEXT,
   max_date    TEXT,
-  tests_json  TEXT NOT NULL
+  tests_json  TEXT NOT NULL,
+  -- Ingest-time summaries (v2.1): /api/rows reads these three integers
+  -- instead of parsing every tests_json blob on every list load.
+  test_count     INTEGER NOT NULL DEFAULT 0,
+  abnormal_count INTEGER NOT NULL DEFAULT 0,
+  kritis_count   INTEGER NOT NULL DEFAULT 0
+);
+
+-- Lab upload audit (v2.1): exact (filename, sha256) dedup. A re-upload of
+-- the same lab file is a no-op (no re-parse, no rewrite, no SSE event);
+-- a DIFFERENT file for the same MR still replaces the old report.
+CREATE TABLE IF NOT EXISTS lab_uploads (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  mr        TEXT NOT NULL,
+  filename  TEXT NOT NULL,
+  sha256    TEXT NOT NULL,
+  loaded_at TEXT NOT NULL,
+  UNIQUE(filename, sha256)
 );
 
 -- Latest input timestamp per facility — drives auto archive/unarchive (v1 facilityLatestInput)

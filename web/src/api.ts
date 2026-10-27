@@ -153,13 +153,100 @@ export async function fetchRekap(): Promise<RekapData> {
   return (await r.json()) as RekapData;
 }
 
-/** Lab uploads: one or more lab-{MR}.xlsx files (latest per MR wins). */
-export async function uploadLab(
-  files: File[],
-): Promise<{ ok: boolean; loaded: number; skipped: string[] }> {
+/**
+ * Structured upload failure (v2.1). The server maps known failure modes to
+ * stable codes + actionable messages (FILE_COUNT_LIMIT, FILE_TOO_LARGE,
+ * UPLOAD_TIMEOUT, …); the UI displays `message` verbatim.
+ */
+export class UploadError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// Uploads can be slow on a busy Windows box (antivirus scanning) — be
+// generous, but never hang the UI forever.
+const UPLOAD_TIMEOUT_MS = 180000;
+
+interface UploadErrorBody {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  limit?: number;
+}
+
+async function parseUploadResponse(r: Response): Promise<unknown> {
+  let body: UploadErrorBody = {};
+  try {
+    body = (await r.json()) as UploadErrorBody;
+  } catch {
+    /* non-JSON body */
+  }
+  if (!r.ok) {
+    throw new UploadError(
+      body.code || (r.status === 413 ? 'FILE_TOO_LARGE' : `HTTP_${r.status}`),
+      body.message || `Upload failed (HTTP ${r.status}). Try smaller batches of 5–10 files.`,
+    );
+  }
+  return body;
+}
+
+/**
+ * Upload one BATCH of files (the caller chunks — 5 per request keeps memory
+ * and write-backs bounded on the server). Resolves with the parsed response
+ * typed by T (the body is always the server's JSON for that endpoint).
+ */
+async function uploadBatch<T>(url: string, files: File[]): Promise<T> {
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
-  const r = await fetch('/api/uploads/lab', { method: 'POST', body: fd });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return (await r.json()) as { ok: boolean; loaded: number; skipped: string[] };
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
+  let r: Response;
+  try {
+    r = await fetch(url, { method: 'POST', body: fd, signal: ctrl.signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new UploadError('UPLOAD_TIMEOUT', 'Upload timed out. Try smaller batches of 5–10 files.');
+    }
+    throw new UploadError('NETWORK', 'Could not reach the server. Check the connection and retry.');
+  } finally {
+    clearTimeout(t);
+  }
+  const body = (await parseUploadResponse(r)) as Record<string, unknown>;
+  if (body.ok === false) {
+    throw new UploadError(String(body.code || 'UNKNOWN'), String(body.message || 'Upload failed.'));
+  }
+  return body as T;
+}
+
+export interface RegistryUploadResult {
+  ok: boolean;
+  files: number;
+  added: number;
+  merged: number;
+  readmissions: number;
+  skipped: string[];
+  failed: { filename: string; code: string; message: string }[];
+  warnings: string[];
+  sync: { archived: number; unarchived: number };
+}
+
+export interface LabUploadResult {
+  ok: boolean;
+  loaded: number;
+  duplicates: string[];
+  skipped: string[];
+  failed: { filename: string; code: string; message: string }[];
+}
+
+/** Registry/handover upload for ONE batch. */
+export function uploadRegistry(files: File[]): Promise<RegistryUploadResult> {
+  return uploadBatch<RegistryUploadResult>('/api/uploads', files);
+}
+
+/** Lab upload for ONE batch (latest per MR wins; exact-file dupes are no-ops). */
+export function uploadLab(files: File[]): Promise<LabUploadResult> {
+  return uploadBatch<LabUploadResult>('/api/uploads/lab', files);
 }

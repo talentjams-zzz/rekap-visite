@@ -12,7 +12,7 @@
 //    past-day checklist history from v1's point of view.
 //  - colWidths / labColWidths (v1 UI state) are carried through unchanged.
 //  - atomic write (tmp + rename) so v1 never reads a half-written file.
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -20,6 +20,12 @@ export interface WriteBackResult {
   version: number;
   rows: number;
 }
+
+// Unique temp filename per write (v2.1): the old fixed name meant two
+// concurrent exports could clobber each other's temp file. Each write-back
+// also gets its own pid+counter suffix, so even cross-process races can't
+// collide (write-backs are serialized within a process by wbqueue).
+let tmpCounter = 0;
 
 type V1Like = {
   savedAt?: string;
@@ -71,12 +77,32 @@ export async function writeBackToV1(
     )
     .all() as Record<string, unknown>[];
 
-  const histStmt = db.prepare(
-    `SELECT report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap,
+  // Bulk load ONCE and group in memory (v2.1, guide Phase 13): the old
+  // per-patient prepared statements were an N+1 across ~370 patients.
+  // history excludes each patient's CURRENT day (report_date = date_added),
+  // so group first, then filter per patient.
+  const allDays = db.prepare(
+    `SELECT patient_id, report_date, tgl_registrasi, nama, umur, kamar, bed, dokter, diagnosis, operan, terapi, soap,
             pharmacist_note, visite, pto, konseling, rekonsiliasi_obat, penelusuran_obat
-     FROM patient_days WHERE patient_id = ? AND report_date != ? ORDER BY report_date DESC`,
-  );
-  const chkStmt = db.prepare('SELECT item_key, checked_at FROM row_checklist WHERE patient_id = ?');
+     FROM patient_days ORDER BY report_date DESC`,
+  ).all() as Record<string, unknown>[];
+  const daysBy = new Map<string, Record<string, unknown>[]>();
+  for (const d of allDays) {
+    const m = daysBy.get(String(d.patient_id)) ?? [];
+    m.push(d);
+    daysBy.set(String(d.patient_id), m);
+  }
+  const allChk = db.prepare('SELECT patient_id, item_key, checked_at FROM row_checklist').all() as {
+    patient_id: string;
+    item_key: string;
+    checked_at: string | null;
+  }[];
+  const chkBy = new Map<string, { item_key: string; checked_at: string | null }[]>();
+  for (const c of allChk) {
+    const m = chkBy.get(c.patient_id) ?? [];
+    m.push(c);
+    chkBy.set(c.patient_id, m);
+  }
 
   const rows = patients.map((p) => {
     const legacy = legacyByRowId.get(String(p.id)) ?? {};
@@ -85,12 +111,13 @@ export async function writeBackToV1(
       catatan_pengobatan: null,
       pio: null,
     };
-    for (const c of chkStmt.all(p.id as string) as { item_key: string; checked_at: string | null }[]) {
+    for (const c of chkBy.get(String(p.id)) ?? []) {
       checklist[c.item_key] = c.checked_at;
     }
     const history = (
-      histStmt.all(p.id as string, (p.date_added as string | null) ?? '') as Record<string, unknown>[]
-    ).map((h) => ({
+      (daysBy.get(String(p.id)) ?? [])
+        .filter((h) => h.report_date !== ((p.date_added as string | null) ?? ''))
+        .map((h) => ({
       date: String(h.report_date),
       tglRegistrasi: (h.tgl_registrasi as string) ?? null,
       nama: (h.nama as string) ?? null,
@@ -109,7 +136,8 @@ export async function writeBackToV1(
       konseling: (h.konseling as string) ?? null,
       rekonsiliasi_obat: (h.rekonsiliasi_obat as string) ?? null,
       penelusuran_obat: (h.penelusuran_obat as string) ?? null,
-    }));
+    })));
+
 
     const aso = parseJsonArray<unknown>(p.aso_json as string | null, []);
     const row: Record<string, unknown> = {
@@ -152,7 +180,8 @@ export async function writeBackToV1(
   const pcStmt = db.prepare('SELECT mr, item_key, checked_at FROM patient_checklist');
   const patientChecklist: Record<string, Record<string, string | null>> = {};
   for (const c of pcStmt.all() as { mr: string; item_key: string; checked_at: string | null }[]) {
-    (patientChecklist[c.mr] ??= {})[c.item_key] = c.checked_at;
+    const m = patientChecklist[c.mr] ?? (patientChecklist[c.mr] = {});
+    m[c.item_key] = c.checked_at;
   }
 
   const labStmt = db.prepare('SELECT mr, loaded_at, max_date, tests_json FROM labs');
@@ -184,9 +213,17 @@ export async function writeBackToV1(
     version,
   };
 
-  const tmp = path.join(path.dirname(masterFile), `.${path.basename(masterFile)}.v2tmp`);
-  await writeFile(tmp, JSON.stringify(out, null, 2), 'utf8');
-  await rename(tmp, masterFile);
+  const tmp = path.join(
+    path.dirname(masterFile),
+    `.${path.basename(masterFile)}.v2tmp.${process.pid}.${++tmpCounter}`,
+  );
+  try {
+    await writeFile(tmp, JSON.stringify(out, null, 2), 'utf8');
+    await rename(tmp, masterFile);
+  } catch (e) {
+    await unlink(tmp).catch(() => undefined); // never litter a half-written temp file
+    throw e;
+  }
 
   // Keep the poll gate in sync: the file now equals the DB, at this version.
   db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run('source_version', String(version));

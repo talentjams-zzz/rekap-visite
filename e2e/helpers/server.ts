@@ -113,3 +113,23 @@ export async function apiHistory(base: string, id: string) {
   if (!r.ok) throw new Error(`history: HTTP ${r.status}`);
   return (await r.json()) as any[];
 }
+
+/**
+ * Wait until the coalesced v1 write-back has flushed at least `minWrites`
+ * exports and is no longer in flight. v2.1: the write-back is a background
+ * coalesced job (quiet window + single writer), so specs that read
+ * master_data.json must wait for it instead of assuming it ran synchronously.
+ */
+export async function waitWriteback(base: string, minWrites: number, timeoutMs = 15000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const h = (await fetch(`${base}/api/health`).then((r) => r.json())) as {
+      writeback: { writes: number; running: boolean };
+    };
+    if (h.writeback.writes >= minWrites && !h.writeback.running) return;
+    if (Date.now() > deadline) {
+      throw new Error(`write-back did not reach ${minWrites} exports (got ${h.writeback.writes}, running=${h.writeback.running})`);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}

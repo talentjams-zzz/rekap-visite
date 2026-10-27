@@ -1,6 +1,7 @@
 // Migration core: v1 master_data.json -> v2 SQLite.
 // Shared by the CLI (scripts/migrate-v1.ts) and the server (auto-migration).
 import type { DatabaseSync } from 'node:sqlite';
+import { labAbnormal } from './core/parsers.js';
 
 export const ROW_ITEMS = ['telaah_resep', 'catatan_pengobatan', 'pio'] as const;
 export const LOG_FIELDS: Record<string, string> = {
@@ -163,10 +164,25 @@ export function runMigration(db: DatabaseSync, src: V1Master, schemaSql: string)
       }
     }
 
-    const insL = db.prepare('INSERT OR REPLACE INTO labs (mr, filename, loaded_at, max_date, tests_json) VALUES (?, ?, ?, ?, ?)');
+    // Summary counts computed with the same v1 rules the UI uses (v2.1):
+    // v1 files carry raw test fields (no flags), v2 write-back files carry
+    // the overridden `normal` values, so recomputing from the stored
+    // fields is stable in both cases.
+    const insL = db.prepare(
+      'INSERT OR REPLACE INTO labs (mr, filename, loaded_at, max_date, tests_json, test_count, abnormal_count, kritis_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    );
     for (const [mr, lab] of Object.entries(src.labResults || {})) {
-      insL.run(mr, lab.filename ?? null, lab.loadedAt ?? null, lab.maxDate ?? null,
-        JSON.stringify(lab.tests ?? []));
+      const tests = (lab.tests ?? []) as { hasil?: string; normal?: string; keterangan?: string }[];
+      insL.run(
+        mr,
+        lab.filename ?? null,
+        lab.loadedAt ?? null,
+        lab.maxDate ?? null,
+        JSON.stringify(lab.tests ?? []),
+        tests.length,
+        tests.filter((t) => labAbnormal(String(t.hasil ?? ''), String(t.normal ?? ''))).length,
+        tests.filter((t) => String(t.keterangan ?? '').toLowerCase().includes('dilaporkan')).length,
+      );
     }
 
     const insF = db.prepare('INSERT OR REPLACE INTO facility_latest_input (facility, input_ts) VALUES (?, ?)');

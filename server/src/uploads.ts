@@ -7,6 +7,7 @@ import { applyFiles } from './core/apply.js';
 import { dateFromFilename, detectFacility, inputTimestamp } from './core/filename.js';
 import type { ParsedFile, Sheet } from './core/types.js';
 import { loadWorldState, saveWorldState } from './state.js';
+import { structuredUploadError } from './uploadErrors.js';
 
 export function registerUploads(
   app: FastifyInstance,
@@ -14,14 +15,28 @@ export function registerUploads(
   onChange: () => void,
 ): void {
   app.post('/api/uploads', async (req, reply) => {
+    const t0 = Date.now();
+    // The registry path MUST buffer all files before merging (one world
+    // state merge across the batch) — client-side batching (5 per request)
+    // bounds the memory, unlike the lab path which streams per file.
     const files: { filename: string; buffer: Buffer }[] = [];
-    for await (const part of req.files()) {
-      const buf = await part.toBuffer();
-      files.push({ filename: part.filename, buffer: buf });
+    try {
+      for await (const part of req.files()) {
+        const buf = await part.toBuffer();
+        files.push({ filename: part.filename, buffer: buf });
+      }
+    } catch (e) {
+      const s = structuredUploadError(e);
+      if (s) {
+        app.log.warn({ reqId: req.id, filesSoFar: files.length }, 'upload: multipart limit hit');
+        return reply.code(s.status).send(s.body);
+      }
+      app.log.error({ err: e, reqId: req.id }, 'upload: multipart receive failed');
+      return reply.code(500).send({ ok: false, code: 'RECEIVE_ERROR', message: 'The upload could not be received. Try again with smaller batches.' });
     }
     if (!files.length) {
       reply.code(400);
-      return { ok: false, error: 'no files uploaded' };
+      return { ok: false, code: 'NO_FILES', message: 'No files uploaded.' };
     }
 
     // Server-side analog of v1's file mtime: the upload time distinguishes
@@ -33,6 +48,7 @@ export function registerUploads(
 
     const parsed: ParsedFile[] = [];
     const skipped: string[] = [];
+    const failed: { filename: string; code: string; message: string }[] = [];
     // Dedupe key = filename + content hash. Same name + same bytes → the
     // exact same report re-uploaded (skip: re-merging would bump the
     // upload-time inputTs). Same bytes under a DIFFERENT day's filename is
@@ -70,8 +86,10 @@ export function registerUploads(
           kind: f.filename.toLowerCase().includes('operan') ? 'handover' : 'registry',
           sheets,
         });
-      } catch (e) {
-        skipped.push(`${f.filename} (${(e as Error).message})`);
+      } catch {
+        // A readable upload that XLSX cannot parse is a per-file FAILURE
+        // (distinct from business skips like duplicates/unknown facility).
+        failed.push({ filename: f.filename, code: 'INVALID_XLSX', message: `${f.filename} is not a readable Excel file` });
       }
     }
 
@@ -85,6 +103,7 @@ export function registerUploads(
         added: 0,
         merged: 0,
         skipped,
+        failed,
         warnings: [],
         sync: { archived: 0, unarchived: 0 },
       };
@@ -127,6 +146,20 @@ export function registerUploads(
     }
 
     onChange();
+    app.log.info(
+      {
+        reqId: req.id,
+        files: files.length,
+        bytes: files.reduce((a, f) => a + f.buffer.length, 0),
+        maxFileBytes: files.reduce((a, f) => Math.max(a, f.buffer.length), 0),
+        ms: Date.now() - t0,
+        parsed: parsed.length,
+        skipped: skipped.length,
+        failed: failed.length,
+        readmissions: result.readmissions.length,
+      },
+      'upload done',
+    );
     return {
       ok: true,
       files: parsed.length,
@@ -134,6 +167,7 @@ export function registerUploads(
       merged: result.merged,
       readmissions: result.readmissions.length,
       skipped,
+      failed,
       warnings: result.warnings,
       sync: result.sync,
     };

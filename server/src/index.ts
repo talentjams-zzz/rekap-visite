@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyCompress from '@fastify/compress';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,12 +15,12 @@ import {
 } from './migrate.js';
 import { registerInteractions } from './interactions.js';
 import { registerMaintenance } from './maintenance.js';
-import { labSummaryFrom, registerLabs } from './labs.js';
+import { registerLabs } from './labs.js';
 import type { LabSummary } from './labs.js';
 import { registerUploads } from './uploads.js';
+import { createWritebackQueue } from './wbqueue.js';
 import { writeBackToV1 } from './writeback.js';
 import type { AsoMed } from './core/types.js';
-import type { LabTest } from './core/parsers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
@@ -35,20 +36,26 @@ const schemaSql = readFileSync(path.join(root, 'server', 'schema.sql'), 'utf8');
 
 const events = registerEvents(app);
 await app.register(fastifyMultipart, { limits: { fileSize: 50 * 1024 * 1024, files: 20 } });
+// gzip/br for JSON payloads (v2.1): the archived list + full lab reports
+// shrink ~9x on slow links.
+await app.register(fastifyCompress, { threshold: 1024 });
+
 // Every v2 change: persist to v1's master_data.json (so the frozen v1
 // fallback always sees current state), then broadcast to live clients.
-// Fire-and-forget: async (file I/O must not block the event loop) and
-// never awaited by request handlers.
+// Serialized + coalesced (v2.1): overlapping changes collapse into ONE
+// full export instead of racing on the same temp file; one SSE broadcast
+// per settled wave. Async on purpose (multi-MB write must not block the
+// event loop) and never awaited by request handlers.
+const wb = createWritebackQueue(async () => {
+  const t0 = Date.now();
+  const res = await writeBackToV1(db, masterFile);
+  if (res) app.log.info({ version: res.version, rows: res.rows, ms: Date.now() - t0 }, 'write-back to v1 master file');
+});
 function commit(reason?: string): void {
-  void (async () => {
-    try {
-      const res = await writeBackToV1(db, masterFile);
-      if (res) app.log.info({ reason, version: res.version, rows: res.rows }, 'write-back to v1 master file');
-    } catch (e) {
-      app.log.error({ err: e, reason }, 'write-back to v1 master file FAILED (DB state is authoritative)');
-    }
-    events.broadcast('change', { at: new Date().toISOString(), reason });
-  })();
+  // Clients read SQLite (authoritative) — broadcast immediately; the v1
+  // file export is a background concern, coalesced by the queue.
+  events.broadcast('change', { at: new Date().toISOString(), reason });
+  wb.request();
 }
 
 registerUploads(app, db, () => commit('upload'));
@@ -116,6 +123,9 @@ app.get('/api/health', async () => {
       masterExists: existsSync(masterFile),
       upToDate: src ? !isSourceNewer(db, src) : null,
     },
+    // v2.1 observability: how many actual v1 file exports have run this
+    // boot (coalesced — NOT one per change) + whether one is in flight.
+    writeback: { writes: wb.writes, running: wb.running },
     dbFile,
   };
 });
@@ -155,24 +165,17 @@ function parseAso(raw: unknown): AsoMed[] {
   }
 }
 
-/** tests_json is always written by this server (JSON.stringify), but parse defensively anyway. */
-function parseLabTests(raw: unknown): LabTest[] | null {
-  try {
-    const v = JSON.parse(String(raw ?? '[]'));
-    return Array.isArray(v) ? (v as LabTest[]) : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Patient rows for the UI. ?status=active|archived (default active), ?facility=nusin|... */
 // SAFETY: all WHERE fragments are fixed literals from this allowlist (no
 // user-derived text is ever concatenated into SQL); query values only reach
 // the statement through `?` parameters.
+// v2.1: lab summaries come from three integer columns written at ingest —
+// the list load no longer pulls (or parses) the full tests_json blob.
 const ROWS_SELECT = `SELECT p.id, p.mr, p.facility, p.date_added, p.tgl_registrasi, p.nama, p.umur,
        p.kamar, p.bed, p.dokter, p.diagnosis, p.operan, p.terapi,
        p.pharmacist_note, p.soap, p.aso_json, p.rev, p.archived, p.archived_at, p.last_seen,
-       l.loaded_at AS lab_loaded_at, l.max_date AS lab_max_date, l.tests_json AS lab_tests_json,
+       l.loaded_at AS lab_loaded_at, l.max_date AS lab_max_date,
+       l.test_count AS lab_test_count, l.abnormal_count AS lab_abnormal_count, l.kritis_count AS lab_kritis_count,
        (SELECT COUNT(*) FROM patient_days d WHERE d.patient_id = p.id) AS day_count
   FROM patients p LEFT JOIN labs l ON l.mr = p.mr WHERE `;
 const W_FACILITY = 'p.facility = ? AND ';
@@ -190,6 +193,7 @@ app.get('/api/rows', async (req) => {
     (facility ? W_FACILITY : '') +
     (archived ? W_ARCHIVED : W_ACTIVE) +
     ROWS_ORDER;
+  const t0 = Date.now();
   const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];
 
   // Checklist state (row items + per-patient items) — small enough to load fully.
@@ -235,11 +239,14 @@ app.get('/api/rows', async (req) => {
       aso: parseAso(r.aso_json),
       rev: Number(r.rev ?? 0),
       lab: (() => {
-        if (!r.lab_tests_json) return null;
-        const tests = parseLabTests(r.lab_tests_json);
-        return tests
-          ? labSummaryFrom(tests, (r.lab_loaded_at as string | null) ?? null, String(r.lab_max_date ?? ''))
-          : null;
+        if (!r.lab_loaded_at && r.lab_test_count == null) return null;
+        return {
+          loadedAt: (r.lab_loaded_at as string | null) ?? null,
+          maxDate: String(r.lab_max_date ?? ''),
+          testCount: Number(r.lab_test_count ?? 0),
+          abnormal: Number(r.lab_abnormal_count ?? 0),
+          kritis: Number(r.lab_kritis_count ?? 0),
+        } satisfies LabSummary;
       })(),
       archived: Number(r.archived) === 1,
       archivedAt: (r.archived_at as string | null) ?? null,
@@ -248,7 +255,18 @@ app.get('/api/rows', async (req) => {
       checklist,
     };
   });
+  app.log.debug({ ms: Date.now() - t0, rows: out.length, archived }, 'GET /api/rows done');
   return out;
+});
+
+/** Tiny counts endpoint (v2.1): tab badges without loading the archived
+ *  list — the archived payload only transfers when the tab is actually opened. */
+app.get('/api/counts', async () => {
+  const c = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
+  return {
+    active: c('SELECT COUNT(*) c FROM patients WHERE archived = 0'),
+    archived: c('SELECT COUNT(*) c FROM patients WHERE archived = 1'),
+  };
 });
 
 // ── Rekap (v1 buildRekapData) ──────────────────────────────────────────────
@@ -359,6 +377,22 @@ if (existsSync(webDist)) {
   app.log.info(`serving web dist from ${webDist}`);
 } else {
   app.log.warn('web/dist not found — API only (run: pnpm --filter web build)');
+}
+
+// Graceful shutdown: flush a pending (coalesced) write-back before exiting
+// so the v1 fallback file is as current as possible on restart/redeploy.
+let shuttingDown = false;
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const bail = setTimeout(() => process.exit(0), 10_000);
+    wb.stop();
+    void wb.settle().finally(() => {
+      clearTimeout(bail);
+      process.exit(0);
+    });
+  });
 }
 
 try {

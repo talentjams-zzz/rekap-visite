@@ -1,5 +1,11 @@
 import { useRef, useState } from 'react';
-import { uploadLab } from '../api';
+import {
+  uploadLab,
+  uploadRegistry,
+  UploadError,
+  type LabUploadResult,
+  type RegistryUploadResult,
+} from '../api';
 
 interface Props {
   onUploaded: () => void;
@@ -7,6 +13,13 @@ interface Props {
   /** Rendered inside the dark title bar: V1 topbar button style, no hint. */
   inHeader?: boolean;
 }
+
+// One request carries at most this many files (v2.1, loading guide Phase 2):
+// bounded memory on the server, bounded write-back cost, predictable
+// progress. Batches run SEQUENTIALLY — no concurrent SQLite writes, no
+// concurrent full write-backs. A failed batch is reported and the rest
+// continue.
+const BATCH_SIZE = 5;
 
 export function UploadBar({ onUploaded, notify, inHeader = false }: Props) {
   const btn = inHeader
@@ -17,56 +30,90 @@ export function UploadBar({ onUploaded, notify, inHeader = false }: Props) {
     : 'ml-2 cursor-pointer rounded bg-indigo-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-indigo-700';
   const inputRef = useRef<HTMLInputElement>(null);
   const labRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [labBusy, setLabBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null); // progress label or null
+  const [labBusy, setLabBusy] = useState<string | null>(null);
 
   async function handle(files: FileList | null) {
     if (!files?.length) return;
-    setBusy(true);
+    const all = Array.from(files);
+    setBusy(`${all.length}/${all.length}…`);
+    let parsed = 0;
+    let added = 0;
+    let merged = 0;
+    let readmissions = 0;
+    const skipped: string[] = [];
+    const failed: string[] = [];
+    const warnings: string[] = [];
+    const t0 = Date.now();
     try {
-      const fd = new FormData();
-      for (const f of Array.from(files)) fd.append('files', f);
-      const r = await fetch('/api/uploads', { method: 'POST', body: fd });
-      const j = (await r.json()) as {
-        ok?: boolean;
-        error?: string;
-        files?: number;
-        added?: number;
-        merged?: number;
-        skipped?: string[];
-        warnings?: string[];
-        sync?: { archived: number; unarchived: number };
-      };
-      if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-      let msg = `Loaded ${j.files} file(s): +${j.added} new, ${j.merged} merged`;
-      if (j.sync && (j.sync.archived || j.sync.unarchived)) {
-        msg += ` · ${j.sync.archived} archived, ${j.sync.unarchived} returned to active`;
+      for (let i = 0; i < all.length; i += BATCH_SIZE) {
+        const batch = all.slice(i, i + BATCH_SIZE);
+        setBusy(`${Math.min(i + BATCH_SIZE, all.length)}/${all.length}…`);
+        try {
+          const j: RegistryUploadResult = await uploadRegistry(batch);
+          parsed += j.files;
+          added += j.added;
+          merged += j.merged;
+          readmissions += j.readmissions ?? 0;
+          skipped.push(...(j.skipped ?? []));
+          failed.push(...(j.failed ?? []).map((f) => `${f.filename}: ${f.message}`));
+          warnings.push(...(j.warnings ?? []));
+        } catch (e) {
+          // Request-level failure (multipart limit, timeout, network):
+          // record the batch and continue with the remaining files.
+          const msg = e instanceof UploadError ? e.message : `HTTP error (${(e as Error).message})`;
+          failed.push(`${batch.map((b) => b.name).join(', ')} — ${msg}`);
+        }
       }
-      if (j.skipped?.length) msg += ` · skipped: ${j.skipped.join(', ')}`;
-      notify(msg, (j.warnings?.length ?? 0) > 0);
-      for (const w of j.warnings ?? []) notify(w, true);
-      onUploaded();
-    } catch (e) {
-      notify(`Upload failed: ${(e as Error).message}`, true);
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
+      let msg = `Loaded ${parsed} file(s): +${added} new, ${merged} merged`;
+      if (readmissions > 0) msg += ` · ${readmissions} readmission(s) reset`;
+      if (skipped.length) msg += ` · skipped: ${skipped.join(', ')}`;
+      if (failed.length) msg += ` · FAILED: ${failed.join(' · ')}`;
+      msg += ` (${secs}s)`;
+      notify(msg, failed.length > 0 || warnings.length > 0);
+      for (const w of warnings) notify(w, true);
+      if (parsed > 0) onUploaded();
     } finally {
-      setBusy(false);
+      setBusy(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   }
 
   async function handleLab(files: FileList | null) {
     if (!files?.length) return;
-    setLabBusy(true);
+    const all = Array.from(files);
+    setLabBusy(`${all.length}/${all.length}…`);
+    let loaded = 0;
+    let duplicates = 0;
+    const skipped: string[] = [];
+    const failed: string[] = [];
+    const t0 = Date.now();
     try {
-      const j = await uploadLab(Array.from(files));
-      let msg = `Loaded ${j.loaded} lab report(s)`;
-      if (j.skipped.length) msg += ` · skipped: ${j.skipped.join(', ')}`;
-      notify(msg, j.skipped.length > 0);
-      onUploaded();
-    } catch (e) {
-      notify(`Lab upload failed: ${(e as Error).message}`, true);
+      for (let i = 0; i < all.length; i += BATCH_SIZE) {
+        const batch = all.slice(i, i + BATCH_SIZE);
+        setLabBusy(`${Math.min(i + BATCH_SIZE, all.length)}/${all.length}…`);
+        try {
+          const j: LabUploadResult = await uploadLab(batch);
+          loaded += j.loaded;
+          duplicates += (j.duplicates ?? []).length;
+          skipped.push(...(j.skipped ?? []));
+          failed.push(...(j.failed ?? []).map((f) => f.message));
+        } catch (e) {
+          const msg = e instanceof UploadError ? e.message : `HTTP error (${(e as Error).message})`;
+          failed.push(`${batch.map((b) => b.name).join(', ')} — ${msg}`);
+        }
+      }
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
+      let msg = `Lab files: ${loaded} loaded`;
+      if (duplicates) msg += `, ${duplicates} duplicate(s) ignored`;
+      if (skipped.length) msg += ` · skipped: ${skipped.join(', ')}`;
+      if (failed.length) msg += ` · FAILED: ${failed.join(' · ')}`;
+      msg += ` (${secs}s)`;
+      notify(msg, skipped.length > 0 || failed.length > 0);
+      if (loaded > 0) onUploaded();
     } finally {
-      setLabBusy(false);
+      setLabBusy(null);
       if (labRef.current) labRef.current.value = '';
     }
   }
@@ -92,10 +139,10 @@ export function UploadBar({ onUploaded, notify, inHeader = false }: Props) {
         onChange={(e) => handleLab(e.target.files)}
       />
       <label htmlFor="file-input" className={`${btn} ${busy ? 'opacity-60' : ''}`}>
-        {busy ? 'Loading…' : '📄 Load Excel Files'}
+        {busy ? `📄 ${busy}` : '📄 Load Excel Files'}
       </label>
       <label htmlFor="lab-input" className={`${btn2} ${labBusy ? 'opacity-60' : ''}`}>
-        {labBusy ? 'Loading…' : '🧪 Load Lab Files'}
+        {labBusy ? `🧪 ${labBusy}` : '🧪 Load Lab Files'}
       </label>
       {!inHeader && (
         <span className="ml-2 text-xs text-(--text2)">

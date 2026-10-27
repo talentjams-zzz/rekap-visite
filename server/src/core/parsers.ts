@@ -349,19 +349,29 @@ export interface LabReport {
   tests: LabTest[];
 }
 
+/**
+ * Index of the "Nama Pemeriksaan" header row within one worksheet's first
+ * 20 rows, or -1. Exported so the upload path can convert ONE worksheet at
+ * a time (lazy) and stop at the first match — unrelated cover sheets never
+ * get fully converted (v2.1 memory fix).
+ */
+export function locateLabSheet(rows: Sheet): number {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = (rows[i] || []).map((c) => String(c ?? '').toLowerCase());
+    if (row.some((c) => c.includes('nama pemeriksaan'))) return i;
+  }
+  return -1;
+}
+
 export function parseLabFile(sheets: { name: string; rows: Sheet }[]): LabReport | null {
   let json: Sheet | null = null;
   let headerRow = -1;
   for (const { rows } of sheets) {
-    for (let i = 0; i < Math.min(rows.length, 20); i++) {
-      const row = (rows[i] || []).map((c) => String(c ?? '').toLowerCase());
-      if (row.some((c) => c.includes('nama pemeriksaan'))) {
-        json = rows;
-        headerRow = i;
-        break;
-      }
-    }
-    if (headerRow >= 0) break;
+    const i = locateLabSheet(rows);
+    if (i < 0) continue;
+    json = rows;
+    headerRow = i;
+    break;
   }
   if (headerRow < 0 || !json) return null;
 

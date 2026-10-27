@@ -2,8 +2,52 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { labAbnormal } from './core/parsers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * One-time backfill (v2.1): recompute the lab summary columns from the
+ * stored tests_json so pre-existing databases serve the same numbers from
+ * the cheap integer columns as the old tests_json parsing did.
+ */
+function backfillLabCounts(db: DatabaseSync): void {
+  const rows = db.prepare('SELECT mr, tests_json FROM labs').all() as {
+    mr: string;
+    tests_json: string;
+  }[];
+  const up = db.prepare(
+    'UPDATE labs SET test_count = ?, abnormal_count = ?, kritis_count = ? WHERE mr = ?',
+  );
+  db.exec('BEGIN');
+  let total = 0;
+  let abnormal = 0;
+  let kritis = 0;
+  for (const r of rows) {
+    let tests: { hasil?: string; normal?: string; keterangan?: string }[] = [];
+    try {
+      const v: unknown = JSON.parse(r.tests_json || '[]');
+      tests = Array.isArray(v) ? (v as typeof tests) : [];
+    } catch {
+      /* corrupt blob: keep zeros — the row's full report was unreadable too */
+    }
+    const t = tests.length;
+    const a = tests.filter((x) => labAbnormal(x.hasil ?? '', x.normal ?? '')).length;
+    const k = tests.filter((x) =>
+      String(x.keterangan ?? '').toLowerCase().includes('dilaporkan'),
+    ).length;
+    up.run(t, a, k, r.mr);
+    total += t;
+    abnormal += a;
+    kritis += k;
+  }
+  db.exec('COMMIT');
+  // openDb runs before the Fastify logger exists — console is the channel.
+  console.log(
+    `[openDb] lab summary backfill: ${rows.length} row(s), ${total} tests, ` +
+      `${abnormal} abnormal, ${kritis} critical`,
+  );
+}
 
 export function openDb(file: string): DatabaseSync {
   // A fresh checkout has no data/ dir (gitignored) — create the parent so a
@@ -45,6 +89,14 @@ export function openDb(file: string): DatabaseSync {
   ];
   for (const [col, ddl] of dayNewCols) {
     if (!dayCols.some((c) => c.name === col)) db.exec(ddl);
+  }
+  // v2.1: lab summary columns (ingest-time counts; backfilled once).
+  const labCols = db.prepare("PRAGMA table_info(labs)").all() as { name: string }[];
+  if (!labCols.some((c) => c.name === 'test_count')) {
+    db.exec('ALTER TABLE labs ADD COLUMN test_count INTEGER NOT NULL DEFAULT 0');
+    db.exec('ALTER TABLE labs ADD COLUMN abnormal_count INTEGER NOT NULL DEFAULT 0');
+    db.exec('ALTER TABLE labs ADD COLUMN kritis_count INTEGER NOT NULL DEFAULT 0');
+    backfillLabCounts(db);
   }
   return db;
 }

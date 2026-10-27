@@ -5,7 +5,7 @@
 // Uses its OWN scratch server (seeded before startup, since the fixture
 // server migrates an empty default seed) plus the REAL v1 server.js.
 import { test, expect } from '@playwright/test';
-import { startScratchServer, apiRows } from '../helpers/server.js';
+import { startScratchServer, apiRows, waitWriteback } from '../helpers/server.js';
 import { startV1 } from '../helpers/v1.js';
 import { buildRegistryFile } from '../helpers/xlsx.js';
 import { uploadFiles, waitRows } from '../helpers/ui.js';
@@ -52,6 +52,8 @@ test('v2 changes round-trip through the real v1 server (fallback guarantee)', as
     await uploadFiles(page, [f]);
     await waitRows(base, 'active', (r) => r.length === 1 && r[0].mr === '2002');
     await waitRows(base, 'archived', (r) => r.length === 1 && r[0].mr === '2001');
+    // v2.1: the v1 file export is a coalesced background job — wait for it.
+    await waitWriteback(base, 1);
 
     let out = JSON.parse(readFileSync(file, 'utf8'));
     expect(out.version).toBe(8);
@@ -71,6 +73,7 @@ test('v2 changes round-trip through the real v1 server (fallback guarantee)', as
       body: JSON.stringify({ key: 'telaah_resep', value: '2026-09-20 09:00:00', rev: archivedSeed.rev }),
     });
     expect(r.status).toBe(200);
+    await waitWriteback(base, 2);
     out = JSON.parse(readFileSync(file, 'utf8'));
     expect(out.version).toBe(9);
     expect(out.rows.find((x: any) => x.mr === '2001').checklist.telaah_resep).toBe('2026-09-20 09:00:00');
