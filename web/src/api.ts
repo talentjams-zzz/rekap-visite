@@ -59,21 +59,32 @@ export async function postRowCheck(
   key: string,
   value: string | null,
   rev?: number,
+  toggle?: boolean,
 ): Promise<RowWriteResult> {
   const r = await fetch(`/api/rows/${encodeURIComponent(id)}/check`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value, rev }),
+    body: JSON.stringify({ key, value, rev, ...(toggle ? { toggle: true } : {}) }),
   });
   await throwIfNotOk(r);
   return (await r.json()) as RowWriteResult;
 }
 
-export async function postPatientCheck(mr: string, key: string, value: string | null): Promise<void> {
+/**
+ * toggle=true (review fix): the SERVER flips the current value, so rapid
+ * double-clicks compose correctly even from a stale render. Value-less for
+ * toggles (value null); the server decides set/unset from its own state.
+ */
+export async function postPatientCheck(
+  mr: string,
+  key: string,
+  value: string | null,
+  toggle?: boolean,
+): Promise<void> {
   const r = await fetch(`/api/patients/${encodeURIComponent(mr)}/check`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value }),
+    body: JSON.stringify({ key, value, ...(toggle ? { toggle: true } : {}) }),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }

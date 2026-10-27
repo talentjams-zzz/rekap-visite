@@ -104,7 +104,12 @@ export function registerInteractions(
 
   app.post('/api/rows/:id/check', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { key, value, rev } = req.body as { key?: string; value?: string | null; rev?: number };
+    const { key, value, rev, toggle } = req.body as {
+      key?: string;
+      value?: string | null;
+      rev?: number;
+      toggle?: boolean;
+    };
     if (!key || !ROW_ITEM_KEYS.includes(key)) {
       reply.code(400);
       return { ok: false, error: 'invalid row checklist item' };
@@ -118,10 +123,21 @@ export function registerInteractions(
       reply.code(409);
       return { ok: false, error: 'conflict' };
     }
+    // Toggle semantics (review fix): when toggle is set, the SERVER flips
+    // the current DB value instead of trusting a client-computed value.
+    // Rapid double-clicks then compose correctly even when the client's
+    // rendered state is one click stale — a stale value write could not.
+    let finalValue = value ?? null;
+    if (toggle) {
+      const cur = (db.prepare(
+        'SELECT checked_at FROM row_checklist WHERE patient_id = ? AND item_key = ?',
+      ).get(id, key) as { checked_at: string | null } | undefined)?.checked_at ?? null;
+      finalValue = cur ? null : nowTs();
+    }
     db.prepare(
       'INSERT INTO row_checklist (patient_id, item_key, checked_at) VALUES (?,?,?) ' +
         'ON CONFLICT(patient_id, item_key) DO UPDATE SET checked_at = excluded.checked_at',
-    ).run(id, key, value ?? null);
+    ).run(id, key, finalValue);
     db.prepare(REV_BUMP).run(id);
     const newRev = Number((db.prepare(REV_SELECT).get(id) as { rev: number }).rev);
     broadcast();
@@ -131,15 +147,24 @@ export function registerInteractions(
   // Patient-level checklist (5 lifetime items, keyed by MR).
   app.post('/api/patients/:mr/check', async (req, reply) => {
     const { mr } = req.params as { mr: string };
-    const { key, value } = req.body as { key?: string; value?: string | null };
+    const { key, value, toggle } = req.body as { key?: string; value?: string | null; toggle?: boolean };
     if (!key || !PATIENT_ITEM_KEYS.includes(key)) {
       reply.code(400);
       return { ok: false, error: 'invalid patient checklist item' };
     }
+    // Toggle semantics (same as the row check above): server flips the
+    // current value; fast double-clicks compose instead of clobbering.
+    let finalValue = value ?? null;
+    if (toggle) {
+      const cur = (db.prepare(
+        'SELECT checked_at FROM patient_checklist WHERE mr = ? AND item_key = ?',
+      ).get(mr, key) as { checked_at: string | null } | undefined)?.checked_at ?? null;
+      finalValue = cur ? null : nowTs();
+    }
     db.prepare(
       'INSERT INTO patient_checklist (mr, item_key, checked_at) VALUES (?,?,?) ' +
         'ON CONFLICT(mr, item_key) DO UPDATE SET checked_at = excluded.checked_at',
-    ).run(mr, key, value ?? null);
+    ).run(mr, key, finalValue);
     broadcast();
     return { ok: true };
   });

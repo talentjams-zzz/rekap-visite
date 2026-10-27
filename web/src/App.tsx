@@ -8,7 +8,6 @@ import {
   postPatientCheck,
   postRowCheck,
   runMaintenance,
-  type RowWriteResult,
 } from './api';
 import { PatientTable } from './components/PatientTable';
 import { Rekap } from './components/Rekap';
@@ -130,6 +129,12 @@ export default function App() {
       Promise.all([fetchRows('active', ctrl.signal), fetchCounts(ctrl.signal), archP])
         .then(([a, c, b]) => {
           if (seq !== loadSeq.current) return; // superseded by a newer load
+          // A fresh load is the source of truth: drop cached per-row revs
+          // (ASO + checklist) — a stale cached rev lower than the server's
+          // would 409 the next write (latent bug: survived loads, then the
+          // next save self-conflicted).
+          asoRev.current.clear();
+          checkRev.current.clear();
           setActive(a);
           setArchCount(c.archived);
           if (b !== null) {
@@ -163,6 +168,10 @@ export default function App() {
     return () => {
       es.close();
       if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current);
+      // Unmount (review fix): a pending coalesce timer is cleared above, but
+      // an IN-FLIGHT fetch survives — abort it so unmounting cancels the
+      // request, not just its state application.
+      reloadAbort.current?.abort();
     };
   }, [reload]);
 
@@ -194,35 +203,65 @@ export default function App() {
     [],
   );
 
+  // ── Checklist writes: server-side toggle + per-row serialization ──────
+  // The old code sent a client-computed value from the RENDERED row state.
+  // Two fast clicks (same or different chips) shared the same render, so
+  // the second click reused a stale value AND a stale rev → the server
+  // rejected it (409) and the UI flashed "changed on another device" — a
+  // self-inflicted conflict (review-confirmed). Now: the server flips the
+  // current DB value (toggle), same-row requests are serialized, and each
+  // send uses the newest known rev (ref, updated synchronously — React
+  // state can't be trusted mid-chain).
+  const checkRev = useRef(new Map<string, number>());
+  const checkChain = useRef(new Map<string, Promise<unknown>>());
+  const checkDead = useRef(new Set<string>());
+
   const handleToggleCheck = useCallback(
     (row: RowDto, key: string) => {
-      const value = row.checklist[key] ? null : nowTs();
       const isRowItem = ROW_ITEM_KEYS.has(key);
-      // Patient items are keyed by MR — update all rows sharing that MR.
+      // Optimistic toggle against the CURRENT state (the update fn sees the
+      // latest array, including this call's siblings) — not the closure's
+      // possibly-stale row. Patient items are keyed by MR: all rows sharing
+      // that MR flip together.
       updateLocal((rows) =>
         rows.map((r) =>
           (isRowItem ? r.id === row.id : r.mr === row.mr)
-            ? { ...r, checklist: { ...r.checklist, [key]: value } }
+            ? { ...r, checklist: { ...r.checklist, [key]: r.checklist[key] ? null : nowTs() } }
             : r,
         ),
       );
-      const call: Promise<RowWriteResult | undefined> = isRowItem
-        ? postRowCheck(row.id, key, value, row.rev)
-        : postPatientCheck(row.mr, key, value).then(() => undefined);
-      call.then((res) => {
-        // Refresh the local rev so back-to-back writes don't 409.
-        if (isRowItem && res && typeof res.rev === 'number') {
-          const nr = res.rev;
-          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
-        }
-      }).catch((e: Error) => {
-        if (e instanceof ConflictError) {
-          notify('Row changed on another device — reloading', true);
-        } else {
+      if (!isRowItem) {
+        postPatientCheck(row.mr, key, null, true).catch((e: Error) => {
           notify(`Check failed: ${e.message}`, true);
-        }
-        reload();
-      });
+          reload();
+        });
+        return;
+      }
+      checkDead.current.delete(row.id); // user is clicking again — clear conflict flag
+      const prev = checkChain.current.get(row.id) ?? Promise.resolve();
+      const task = prev
+        .then(async () => {
+          if (checkDead.current.has(row.id)) return;
+          const rev = checkRev.current.get(row.id) ?? row.rev;
+          const res = await postRowCheck(row.id, key, null, rev, true);
+          if (typeof res.rev === 'number') {
+            checkRev.current.set(row.id, res.rev);
+            const nr = res.rev;
+            updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
+          }
+        })
+        .catch((e: Error) => {
+          checkDead.current.add(row.id);
+          checkChain.current.delete(row.id);
+          checkRev.current.delete(row.id);
+          if (e instanceof ConflictError) {
+            notify('Row changed on another device — reloading', true);
+          } else {
+            notify(`Check failed: ${e.message}`, true);
+          }
+          reload();
+        });
+      checkChain.current.set(row.id, task.catch(() => undefined));
     },
     [notify, reload, updateLocal],
   );
