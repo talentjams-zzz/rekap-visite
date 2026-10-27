@@ -117,6 +117,27 @@ untouched until E2E passes on v2.
   - Catatan Pengobatan (row item) is NOT reset (v1: one-time per-patient
     task); labs are kept (latest-report reference data).
 
+### v2.1 performance & upload robustness (lab-data loading guide)
+- **Chunked uploads** — client sends 5 files/request, sequential; a failed
+  batch is reported and later batches continue. Progress + totals shown.
+- **Structured upload errors** — stable codes (FILE_COUNT_LIMIT,
+  FILE_TOO_LARGE, UPLOAD_TIMEOUT, INVALID_XLSX, …) + actionable messages
+  instead of a bare HTTP status.
+- **Bounded memory** — lab path streams one file at a time (no longer
+  buffers all 20); worksheets convert lazily with sheet/row caps.
+- **Ingest-time lab summaries** — /api/rows reads three integer columns,
+  not every tests_json blob; full report stays on the dedicated endpoint.
+- **Lab dedupe** — exact (filename, sha256) re-upload is a no-op (no
+  re-parse/rewrite/write-back/SSE); a different file for the same MR still
+  replaces the old report.
+- **Coalesced write-back** — overlapping v1 exports collapse into one;
+  unique temp file; graceful-shutdown flush. SSE fires immediately (clients
+  read SQLite); the legacy file export is background work.
+- **Lazy archived loading** — initial page transfers active + a tiny count;
+  the archived list loads once on first Archived-tab open.
+- **gzip/br** on JSON payloads; stable row handler identity so memoized
+  body rows skip re-render during drags/edits.
+
 ## Testing
 - **Unit (Vitest)**: filename → facility/date parsing; registry/handover/lab
   parsers; merge rules (latest-file-wins, riwayat append, same-day

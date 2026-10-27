@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ConflictError,
+  fetchCounts,
   fetchRows,
   patchAso,
   patchRow,
@@ -57,7 +58,13 @@ const FILTER_BTNS: Array<[string, string]> = [
 export default function App() {
   const [tab, setTab] = useState<Tab>('nusin');
   const [active, setActive] = useState<RowDto[]>([]);
+  // v2.1: the archived list is loaded LAZILY (the tab is rarely the first
+  // thing looked at, and it's the bigger payload). archLoaded=false means
+  // the list is stale/missing — the next Archived-tab open refetches.
   const [archived, setArchived] = useState<RowDto[]>([]);
+  const [archLoaded, setArchLoaded] = useState(false);
+  // Server-side count for the tab badge (no archived transfer needed).
+  const [archCount, setArchCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -91,23 +98,60 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
   }, []);
 
-  // Stale-response guard: a slow response must never clobber newer state
-  // (SSE reloads overlap with manual ones — the last one started wins).
+  // ── Reloading (v2.1: coalesced + aborting + lazy archived) ──────────────
+  // Every change event used to trigger a full fetch of BOTH lists; an
+  // upload (immediate) + its SSE broadcast (a moment later) meant two
+  // overlapping list loads. Now: calls within 150 ms collapse into one,
+  // and a new reload ABORTS the in-flight one (cancelling the network work,
+  // not just ignoring the response). The archived list only travels when
+  // it's already loaded or visible.
+  // Stale-response guard stays: a slow response must never clobber newer
+  // state — the last load started wins.
   const loadSeq = useRef(0);
+  const reloadTimer = useRef<number | null>(null);
+  const reloadAbort = useRef<AbortController | null>(null);
+  // Refs so the coalesced closure sees the current tab/archLoaded without
+  // being re-created (reload must stay referentially stable).
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const archLoadedRef = useRef(archLoaded);
+  archLoadedRef.current = archLoaded;
 
   const reload = useCallback(() => {
-    const seq = ++loadSeq.current;
-    Promise.all([fetchRows('active'), fetchRows('archived')])
-      .then(([a, b]) => {
-        if (seq !== loadSeq.current) return; // superseded by a newer load
-        setActive(a);
-        setArchived(b);
-        setError(null); // a successful load always clears the banner
-      })
-      .catch((e) => {
-        if (seq === loadSeq.current) setError(String(e));
-      });
+    if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = window.setTimeout(() => {
+      reloadTimer.current = null;
+      reloadAbort.current?.abort(); // cancel the superseded request(s)
+      const ctrl = new AbortController();
+      reloadAbort.current = ctrl;
+      const seq = ++loadSeq.current;
+      const wantArchived = archLoadedRef.current || tabRef.current === 'archived';
+      const archP = wantArchived ? fetchRows('archived', ctrl.signal) : Promise.resolve(null);
+      Promise.all([fetchRows('active', ctrl.signal), fetchCounts(ctrl.signal), archP])
+        .then(([a, c, b]) => {
+          if (seq !== loadSeq.current) return; // superseded by a newer load
+          setActive(a);
+          setArchCount(c.archived);
+          if (b !== null) {
+            setArchived(b);
+            setArchLoaded(true);
+          } else {
+            setArchLoaded(false); // list now stale — next tab open refetches
+          }
+          setError(null); // a successful load always clears the banner
+        })
+        .catch((e: unknown) => {
+          const name = (e as { name?: string })?.name;
+          if (name === 'AbortError') return; // superseded — not an error
+          if (seq === loadSeq.current) setError(String(e));
+        });
+    }, 150);
   }, []);
+
+  // Opening the Archived tab with a stale/missing list triggers the load.
+  useEffect(() => {
+    if (tab === 'archived' && !archLoaded) reload();
+  }, [tab, archLoaded, reload]);
 
   useEffect(() => {
     reload();
@@ -116,7 +160,10 @@ export default function App() {
     // auto-migration, or another device's save).
     const es = new EventSource('/api/events');
     es.addEventListener('change', reload);
-    return () => es.close();
+    return () => {
+      es.close();
+      if (reloadTimer.current !== null) window.clearTimeout(reloadTimer.current);
+    };
   }, [reload]);
 
   // Self-healing: a transient failure ("TypeError: Failed to fetch" after a
@@ -293,7 +340,7 @@ export default function App() {
   // v1 🧹 Monthly Cleanup: back up ALL data, then remove archived patients.
   const [busyCleanup, setBusyCleanup] = useState(false);
   const handleMaintenance = async () => {
-    const n = archived.length;
+    const n = archCount; // server count — the list itself may not be loaded
     const ok = window.confirm(
       `Monthly cleanup:\n1. Back up ALL data (active + archived) to a timestamped file\n` +
         `2. Remove ${n} archived patient(s) and their leftover checklist/lab data\n\n` +
@@ -313,10 +360,10 @@ export default function App() {
   };
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { archived: archived.length };
+    const c: Record<string, number> = { archived: archCount };
     for (const f of FACILITIES) c[f] = active.filter((r) => r.facility === f).length;
     return c;
-  }, [active, archived]);
+  }, [active, archCount]);
 
   // V1 isItemDone/matchesFilters: a row shows when it is UNDONE for every
   // active filter (multi-select AND semantics, exactly like v1).
@@ -476,6 +523,10 @@ export default function App() {
                 </div>
               )}
               <div className="min-h-0 flex-1">
+                {tab === 'archived' && !archLoaded && (
+                  <p className="p-4 text-(--text2)">Loading archived…</p>
+                )}
+                {!(tab === 'archived' && !archLoaded) && (
                 <PatientTable
                   rows={shown}
                   facility={tab === 'archived' ? 'all' : tab}
@@ -486,9 +537,10 @@ export default function App() {
                   onAsoChange={handleAsoChange}
                   notify={notify}
                 />
+                )}
               </div>
               <p className="shrink-0 text-[11px] leading-tight text-(--text2)">
-                {title} — {shown.length} row(s)
+                {title} — {tab === 'archived' && !archLoaded ? '…' : shown.length} row(s)
               </p>
             </div>
           )}

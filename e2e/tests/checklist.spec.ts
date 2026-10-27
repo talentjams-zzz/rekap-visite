@@ -45,6 +45,12 @@ test.describe('checklist daily-reset semantics', () => {
     expect(r.checklist.telaah_resep).toBeNull();
     expect(r.checklist.visite).toBeTruthy();
 
+    // The upload's reload is coalesced (150 ms): wait until the UI shows the
+    // new day BEFORE re-clicking. A toggle click uses the SHOWN row state —
+    // clicking a not-yet-reloaded row would toggle from the stale (pre-upload)
+    // checklist and erase the check.
+    await expect(page.locator('table tbody tr td:nth-child(2)').first()).toContainText('2026-08-26');
+
     // Re-check, reload SAME day → must be kept (idempotent).
     await page.locator('table tbody tr').first().locator('button', { hasText: 'TR' }).click();
     await waitCheck(base, (x) => x.checklist.telaah_resep);

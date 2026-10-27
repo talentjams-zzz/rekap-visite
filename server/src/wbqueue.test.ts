@@ -23,12 +23,18 @@ describe('createWritebackQueue', () => {
 
   it('runs a second pass when a change lands WHILE a write is running', async () => {
     let calls = 0;
+    let inWrite = false;
     const q = createWritebackQueue(async () => {
       calls++;
-      await sleep(50); // longer than the quiet window
+      inWrite = true;
+      await sleep(80); // longer than the quiet window
+      inWrite = false;
     }, Q);
     q.request();
-    await sleep(Q + 10); // the first write is now in flight
+    // Wait until the first write is verifiably in flight (timing-blind: a
+    // plain sleep can land before the quiet window ends under load).
+    for (let i = 0; i < 400 && !inWrite; i++) await sleep(5);
+    expect(inWrite).toBe(true);
     q.request(); // arrives mid-write → must not be lost
     await q.settle();
     expect(calls).toBe(2);

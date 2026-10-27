@@ -284,6 +284,20 @@ interface Props extends Handlers {
 
 export function PatientTable({ rows, facility: _facility, showFacility = false, ...handlers }: Props) {
   void _facility; // all facilities share the full column set (v1 COLS_SHORT === COLS_FULL)
+  // The rest-spread above is a NEW object on every render, which defeated
+  // the BodyRow memo (handlers identity changed → all rows re-rendered on
+  // any table re-render, including live column drags). The PROPERTIES are
+  // App-level useCallbacks (referentially stable), so memoize the bag once.
+  const stableHandlers = useMemo<Handlers>(
+    () => ({
+      onToggleCheck: handlers.onToggleCheck,
+      onEditField: handlers.onEditField,
+      onToggleArchive: handlers.onToggleArchive,
+      onAsoChange: handlers.onAsoChange,
+      notify: handlers.notify,
+    }),
+    [handlers.onToggleCheck, handlers.onEditField, handlers.onToggleArchive, handlers.onAsoChange, handlers.notify],
+  );
   const storageKey = `rekap-col-widths-${showFacility ? 'archived' : _facility}`;
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() => {
     try {
@@ -634,7 +648,7 @@ export function PatientTable({ rows, facility: _facility, showFacility = false, 
               showFacility={showFacility}
               expanded={expanded}
               labOpen={labOpen}
-              handlers={handlers}
+              handlers={stableHandlers}
               colCount={columns.length}
             />
           ))}

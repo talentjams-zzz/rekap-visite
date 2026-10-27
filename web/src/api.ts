@@ -6,10 +6,17 @@ import type { AsoMed, HistoryEntry, LabReport, RekapData, RowDto } from './types
 // just flash the banner on slow-but-working links.
 const READ_TIMEOUT_MS = 30000;
 
-export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]> {
+export async function fetchRows(
+  status: 'active' | 'archived',
+  external?: AbortSignal,
+): Promise<RowDto[]> {
   // A hung connection must fail fast (recoverable error) instead of leaving
-  // the page in a pending state forever.
+  // the page in a pending state forever. v2.1: an external signal (from the
+  // coalesced reloader) can also cancel a superseded request — a new reload
+  // ABORTS the old one instead of just ignoring its response.
   const ctrl = new AbortController();
+  const onAbort = () => ctrl.abort();
+  external?.addEventListener('abort', onAbort, { once: true });
   const t = setTimeout(() => ctrl.abort(), READ_TIMEOUT_MS);
   try {
     const r = await fetch(`/api/rows?status=${status}`, { signal: ctrl.signal });
@@ -17,7 +24,16 @@ export async function fetchRows(status: 'active' | 'archived'): Promise<RowDto[]
     return (await r.json()) as RowDto[];
   } finally {
     clearTimeout(t);
+    external?.removeEventListener('abort', onAbort);
   }
+}
+
+/** Active/archived COUNTS (v2.1): tab badges without transferring the
+ *  (much larger) archived list — see App.tsx lazy archived loading. */
+export async function fetchCounts(external?: AbortSignal): Promise<{ active: number; archived: number }> {
+  const r = await fetch('/api/counts', { signal: external });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return (await r.json()) as { active: number; archived: number };
 }
 
 /** Thrown on HTTP 409 — the row changed on another device; caller reloads. */

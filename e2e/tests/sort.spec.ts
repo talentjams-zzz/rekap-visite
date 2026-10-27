@@ -26,7 +26,12 @@ test('default sort is Tgl Reg desc (time-aware); header toggles asc', async ({ s
   await page.goto(base, { waitUntil: 'load' });
   await uploadFiles(page, [f]);
   await waitRows(base, 'active', (r) => r.length === 5);
-  await page.waitForSelector('table tbody tr');
+  // The upload's reload is coalesced (150 ms) — wait for the five real
+  // rows before reading the order (the empty-state placeholder is also
+  // one <tr> and would otherwise race ahead).
+  await expect.poll(async () =>
+    page.locator('table tbody tr td:nth-child(3)').count(),
+  ).toBe(5);
 
   // Desc: ECHO (19th) > ALPHA (18th 15:31) > BRAVO (18th 08:15) > DELTA
   // (18th 00:00, date-only) > CHARLIE (17th).

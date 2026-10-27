@@ -16,7 +16,9 @@ test('transient API failure: banner + last data kept + auto recovery', async ({ 
   await page.goto(base, { waitUntil: 'load' });
   await uploadFiles(page, [reg]);
   await waitRows(base, 'active', (r) => r.some((x) => x.mr === MR));
-  await expect(page.locator('table tbody tr')).toHaveCount(1);
+  // The upload's reload is coalesced (150 ms) — wait for the real row,
+  // not just "a row" (the empty-state placeholder would satisfy that too).
+  await expect(page.locator('table tbody tr').filter({ hasText: MR })).toBeVisible();
 
   // Sabotage every rows API call (simulates "Failed to fetch").
   await page.route('**/api/rows**', (route) => route.abort());
