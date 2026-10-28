@@ -96,6 +96,10 @@ export function registerInteractions(
       return { ok: false, error: 'row not found' };
     }
     db.prepare(REV_BUMP).run(id);
+    // Broadcast + v1 write-back (ASO-guide fix): this was the only mutation
+    // endpoint that skipped it — ASO-only edits never notified other clients
+    // and never reached the v1 fallback file until some unrelated change.
+    broadcast();
     // Return the new rev so the client can refresh its local copy —
     // back-to-back writes from the same device then never 409.
     const newRev = Number((db.prepare(REV_SELECT).get(id) as { rev: number }).rev);

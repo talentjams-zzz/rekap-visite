@@ -129,15 +129,39 @@ export default function App() {
       Promise.all([fetchRows('active', ctrl.signal), fetchCounts(ctrl.signal), archP])
         .then(([a, c, b]) => {
           if (seq !== loadSeq.current) return; // superseded by a newer load
-          // A fresh load is the source of truth — RECONCILE the rev source,
-          // don't blind-clear it (review F4): queued writes still sitting in
-          // a row's chain pick up the LOADED server rev instead of a stale
-          // click-time snapshot; completed writes already set revs >= these.
-          for (const r of [...a, ...(b ?? [])]) rowRev.current.set(r.id, r.rev);
-          setActive(a);
+          // A fresh load is the source of truth — RECONCILE the rev source
+          // MONOTONICALLY (ASO guide, race B): a late response carrying an
+          // OLDER rev must not regress the cache below a completed write's
+          // rev — the next queued write would send the stale rev and
+          // self-409. max(known, loaded) never blocks a newer server rev.
+          for (const r of [...a, ...(b ?? [])]) {
+            const known = rowRev.current.get(r.id);
+            if (known === undefined || r.rev > known) rowRev.current.set(r.id, r.rev);
+          }
+          // Overlay unfinished ASO drafts (ASO guide, race A): a reload
+          // carrying the pre-typing server snapshot must not make the
+          // controlled input visually regress. A draft is cleared only by
+          // an acknowledgement of ITS OWN generation (see flushAso) — never
+          // by a stale reload.
+          const overlay = (rows: RowDto[]) =>
+            rows.map((r) => {
+              const d = asoDrafts.current.get(r.id);
+              return d ? { ...r, aso: d.aso } : r;
+            });
+          // A row gone from BOTH lists (only knowable once the archived
+          // list was loaded too) has nowhere left for its draft to land —
+          // prune it. While the archived list is lazy-unloaded we cannot
+          // distinguish "deleted" from "not fetched yet", so no pruning.
+          if (b !== null) {
+            const loadedIds = new Set([...a, ...b].map((r) => r.id));
+            for (const id of [...asoDrafts.current.keys()]) {
+              if (!loadedIds.has(id)) asoDrafts.current.delete(id);
+            }
+          }
+          setActive(overlay(a));
           setArchCount(c.archived);
           if (b !== null) {
-            setArchived(b);
+            setArchived(overlay(b));
             setArchLoaded(true);
           } else {
             setArchLoaded(false); // list now stale — next tab open refetches
@@ -306,20 +330,44 @@ export default function App() {
     [enqueueRowWrite, notify, updateLocal],
   );
 
-  // ── ASO writes: debounce + row coordinator ────────────────────────────
+  // ── ASO writes: debounce + row coordinator + DRAFT OWNERSHIP ─────────
   // Saving per keystroke (the old behavior) meant fast typing sent several
   // PATCHes with the SAME row rev → self-inflicted 409s. Now: local state
   // updates instantly (optimistic), the server save is debounced (quiet
   // period), and the actual write goes through the shared row coordinator
   // (serialized behind any in-flight chip/edit on the same row, newest
   // known rev). A 409 can only come from a genuine cross-device change.
+  //
+  // ASO guide fix (race A): the controlled input is no longer fed ONLY by
+  // the server-backed row. While the user is typing, the newest ASO array
+  // lives in a per-row DRAFT with a monotonically increasing generation.
+  // Every reload overlays pending drafts onto the fetched rows (active AND
+  // archived), so a stale server snapshot can never make the input visually
+  // regress. A draft is cleared only when the save of ITS OWN generation
+  // succeeds — a late acknowledgement of an older generation never wipes a
+  // newer in-flight name. (On unmount the timers intentionally keep running
+  // so a pending last save still lands; the map dies with the component.)
   const ASO_SAVE_MS = 500;
   const asoTimer = useRef(new Map<string, number>());
+  const asoDrafts = useRef(new Map<string, { aso: AsoMed[]; generation: number }>());
 
   const flushAso = useCallback(
-    (rowId: string, aso: AsoMed[]) => {
-      if (rowDead.current.has(rowId)) return; // a real conflict reloaded; drop stale saves
-      enqueueRowWrite(rowId, 'ASO save', (rev) => patchAso(rowId, aso, rev));
+    (rowId: string) => {
+      const draft = asoDrafts.current.get(rowId);
+      if (!draft) return; // nothing pending (or already acknowledged)
+      if (rowDead.current.has(rowId)) return; // real conflict reloaded; next keystroke reschedules
+      const gen = draft.generation;
+      const aso = draft.aso;
+      enqueueRowWrite(rowId, 'ASO save', (rev) =>
+        patchAso(rowId, aso, rev).then((res) => {
+          // Clear only if no NEWER edit happened while this request was in
+          // flight — a newer generation keeps its draft (and its own timer)
+          // so the latest name still lands.
+          const cur = asoDrafts.current.get(rowId);
+          if (!cur || cur.generation === gen) asoDrafts.current.delete(rowId);
+          return res;
+        }),
+      );
     },
     [enqueueRowWrite],
   );
@@ -328,13 +376,15 @@ export default function App() {
     (row: RowDto, aso: AsoMed[]) => {
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, aso } : r)));
       rowDead.current.delete(row.id); // user is typing again — clear any conflict flag
+      const prevDraft = asoDrafts.current.get(row.id);
+      asoDrafts.current.set(row.id, { aso, generation: (prevDraft?.generation ?? 0) + 1 });
       const prev = asoTimer.current.get(row.id);
       if (prev) window.clearTimeout(prev);
       asoTimer.current.set(
         row.id,
         window.setTimeout(() => {
           asoTimer.current.delete(row.id);
-          flushAso(row.id, aso); // `aso` is the latest local state (each keystroke reschedules)
+          flushAso(row.id); // reads the LATEST draft, not a closure capture
         }, ASO_SAVE_MS),
       );
     },

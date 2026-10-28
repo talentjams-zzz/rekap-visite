@@ -166,6 +166,19 @@ untouched until E2E passes on v2.
   the loaded rows (never blind-clear), and the rev fallback is the freshly
   loaded row — never a click-time snapshot — so a refresh landing between
   queued writes can't lose the queued write.
+- **ASO draft ownership** — while the user is typing a medicine name, the
+  newest ASO array lives in a per-row draft with a monotonic generation
+  that every reload (active AND archived) overlays onto the fetched rows,
+  so a stale server snapshot can never make the controlled input visually
+  regress ("text deleted" symptom). A draft clears only when the save of
+  ITS OWN generation succeeds — a late acknowledgement of an older save
+  never wipes a newer in-flight name; the rev cache is reconciled
+  monotonically (max of known/loaded) so a late GET can't regress it and
+  cause a self-inflicted 409.
+- **ASO endpoint now broadcasts** — it was the only mutation endpoint that
+  skipped the SSE broadcast + v1 write-back, so ASO-only edits never
+  reached other clients or the v1 fallback file until some unrelated
+  change happened.
 
 ## Testing
 - **Unit (Vitest)**: filename → facility/date parsing; registry/handover/lab
