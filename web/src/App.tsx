@@ -129,12 +129,11 @@ export default function App() {
       Promise.all([fetchRows('active', ctrl.signal), fetchCounts(ctrl.signal), archP])
         .then(([a, c, b]) => {
           if (seq !== loadSeq.current) return; // superseded by a newer load
-          // A fresh load is the source of truth: drop cached per-row revs
-          // (ASO + checklist) — a stale cached rev lower than the server's
-          // would 409 the next write (latent bug: survived loads, then the
-          // next save self-conflicted).
-          asoRev.current.clear();
-          checkRev.current.clear();
+          // A fresh load is the source of truth — RECONCILE the rev source,
+          // don't blind-clear it (review F4): queued writes still sitting in
+          // a row's chain pick up the LOADED server rev instead of a stale
+          // click-time snapshot; completed writes already set revs >= these.
+          for (const r of [...a, ...(b ?? [])]) rowRev.current.set(r.id, r.rev);
           setActive(a);
           setArchCount(c.archived);
           if (b !== null) {
@@ -203,18 +202,57 @@ export default function App() {
     [],
   );
 
-  // ── Checklist writes: server-side toggle + per-row serialization ──────
-  // The old code sent a client-computed value from the RENDERED row state.
-  // Two fast clicks (same or different chips) shared the same render, so
-  // the second click reused a stale value AND a stale rev → the server
-  // rejected it (409) and the UI flashed "changed on another device" — a
-  // self-inflicted conflict (review-confirmed). Now: the server flips the
-  // current DB value (toggle), same-row requests are serialized, and each
-  // send uses the newest known rev (ref, updated synchronously — React
-  // state can't be trusted mid-chain).
-  const checkRev = useRef(new Map<string, number>());
-  const checkChain = useRef(new Map<string, Promise<unknown>>());
-  const checkDead = useRef(new Set<string>());
+  // ── Per-row write coordinator (review F3 fix) ──────────────────────────
+  // Checklist chips, field edits, archive toggles and ASO saves ALL advance
+  // the same server row revision. They used to coordinate separately
+  // (checkRev/asoRev + their own chains), so a successful write from one
+  // control left the other controls' cached rev stale → the next write
+  // 409'd with a self-inflicted "another device" and the action was lost.
+  // Now: ONE rev source + ONE per-row chain for every row mutation.
+  //
+  // Rev selection (F4): the map first; if absent, the FRESHLY LOADED row
+  // (rowsRef) — never the click-time row snapshot, which may predate a
+  // successful load that reconciled the map. Success updates the map
+  // synchronously (React state can't be trusted mid-chain). A 409 marks
+  // the row dead + reloads; the next user click clears the flag.
+  const rowRev = useRef(new Map<string, number>());
+  const rowChain = useRef(new Map<string, Promise<unknown>>());
+  const rowDead = useRef(new Set<string>());
+  const rowsRef = useRef<RowDto[]>([]);
+  useEffect(() => {
+    rowsRef.current = [...active, ...archived];
+  }, [active, archived]);
+
+  const enqueueRowWrite = useCallback(
+    (id: string, label: string, fn: (rev: number) => Promise<{ rev?: number }>) => {
+      const prev = rowChain.current.get(id) ?? Promise.resolve();
+      const task = prev
+        .then(async () => {
+          if (rowDead.current.has(id)) return;
+          const known = rowRev.current.get(id);
+          const fresh = rowsRef.current.find((r) => r.id === id)?.rev;
+          const rev = known ?? fresh ?? 0;
+          const res = await fn(rev);
+          if (res && typeof res.rev === 'number') {
+            rowRev.current.set(id, res.rev);
+            const nr = res.rev;
+            updateLocal((rows) => rows.map((r) => (r.id === id ? { ...r, rev: nr } : r)));
+          }
+        })
+        .catch((e: Error) => {
+          rowDead.current.add(id);
+          rowChain.current.delete(id);
+          if (e instanceof ConflictError) {
+            notify('Row changed on another device — reloading', true);
+          } else {
+            notify(`${label} failed: ${e.message}`, true);
+          }
+          reload();
+        });
+      rowChain.current.set(id, task.catch(() => undefined));
+    },
+    [notify, reload, updateLocal],
+  );
 
   const handleToggleCheck = useCallback(
     (row: RowDto, key: string) => {
@@ -237,132 +275,59 @@ export default function App() {
         });
         return;
       }
-      checkDead.current.delete(row.id); // user is clicking again — clear conflict flag
-      const prev = checkChain.current.get(row.id) ?? Promise.resolve();
-      const task = prev
-        .then(async () => {
-          if (checkDead.current.has(row.id)) return;
-          const rev = checkRev.current.get(row.id) ?? row.rev;
-          const res = await postRowCheck(row.id, key, null, rev, true);
-          if (typeof res.rev === 'number') {
-            checkRev.current.set(row.id, res.rev);
-            const nr = res.rev;
-            updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
-          }
-        })
-        .catch((e: Error) => {
-          checkDead.current.add(row.id);
-          checkChain.current.delete(row.id);
-          checkRev.current.delete(row.id);
-          if (e instanceof ConflictError) {
-            notify('Row changed on another device — reloading', true);
-          } else {
-            notify(`Check failed: ${e.message}`, true);
-          }
-          reload();
-        });
-      checkChain.current.set(row.id, task.catch(() => undefined));
+      rowDead.current.delete(row.id); // user is clicking again — clear conflict flag
+      enqueueRowWrite(row.id, 'Check', (rev) => postRowCheck(row.id, key, null, rev, true));
     },
-    [notify, reload, updateLocal],
+    [enqueueRowWrite, notify, reload, updateLocal],
   );
 
   const handleEditField = useCallback(
     (row: RowDto, key: EditableKey, value: string) => {
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, [key]: value } : r)));
       const patch = key === 'pharmacistNote' ? { note: value } : { [key]: value };
-      patchRow(row.id, { ...patch, rev: row.rev }).then((res) => {
-        if (typeof res.rev === 'number') {
-          const nr = res.rev;
-          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
-        }
-      }).catch((e: Error) => {
-        if (e instanceof ConflictError) {
-          notify('Row changed on another device — reloading', true);
-        } else {
-          notify(`Save failed: ${e.message}`, true);
-        }
-        reload();
-      });
+      // Goes through the row coordinator: serialized behind any in-flight
+      // chip/ASO write and sent with the newest known rev (F3).
+      enqueueRowWrite(row.id, 'Save', (rev) => patchRow(row.id, { ...patch, rev }));
     },
-    [notify, reload, updateLocal],
+    [enqueueRowWrite, updateLocal],
   );
 
   const handleToggleArchive = useCallback(
     (row: RowDto) => {
       const archived = !row.archived;
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, archived } : r)));
-      patchRow(row.id, { archived, rev: row.rev }).then((res) => {
-        notify(`${row.nama || row.mr} ${archived ? 'archived' : 'returned to active'}`);
-        if (typeof res.rev === 'number') {
-          const nr = res.rev;
-          updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, rev: nr } : r)));
-        }
-      }).catch((e: Error) => {
-        if (e instanceof ConflictError) {
-          notify('Row changed on another device — reloading', true);
-        } else {
-          notify(`Archive failed: ${e.message}`, true);
-        }
-        reload();
-      });
+      enqueueRowWrite(row.id, 'Archive', (rev) =>
+        patchRow(row.id, { archived, rev }).then((res) => {
+          notify(`${row.nama || row.mr} ${archived ? 'archived' : 'returned to active'}`);
+          return res;
+        }),
+      );
     },
-    [notify, reload, updateLocal],
+    [enqueueRowWrite, notify, updateLocal],
   );
 
-  // ── ASO writes: debounce + per-row serialization ───────────────────────
+  // ── ASO writes: debounce + row coordinator ────────────────────────────
   // Saving per keystroke (the old behavior) meant fast typing sent several
-  // PATCHes with the SAME row rev; the second hit a 409 from the first and
-  // the UI said "Row changed on another device" — a self-inflicted conflict.
-  // Now: local state updates instantly (optimistic), the server save is
-  // debounced (quiet period), same-row saves are serialized, and each send
-  // uses the newest known rev (kept in a ref, updated synchronously from
-  // the previous response — React state can't be trusted mid-chain). A 409
-  // can only come from a genuine cross-device change now.
+  // PATCHes with the SAME row rev → self-inflicted 409s. Now: local state
+  // updates instantly (optimistic), the server save is debounced (quiet
+  // period), and the actual write goes through the shared row coordinator
+  // (serialized behind any in-flight chip/edit on the same row, newest
+  // known rev). A 409 can only come from a genuine cross-device change.
   const ASO_SAVE_MS = 500;
   const asoTimer = useRef(new Map<string, number>());
-  const asoChain = useRef(new Map<string, Promise<unknown>>());
-  const asoRev = useRef(new Map<string, number>());
-  const asoDead = useRef(new Set<string>()); // row: last save 409'd, skip queued saves
-  const rowsRef = useRef<RowDto[]>([]);
-  useEffect(() => {
-    rowsRef.current = [...active, ...archived];
-  }, [active, archived]);
 
   const flushAso = useCallback(
     (rowId: string, aso: AsoMed[]) => {
-      if (asoDead.current.has(rowId)) return; // a real conflict reloaded; drop stale saves
-      const prev = asoChain.current.get(rowId) ?? Promise.resolve();
-      const task = prev
-        .then(async () => {
-          const row = rowsRef.current.find((r) => r.id === rowId);
-          const rev = asoRev.current.get(rowId) ?? row?.rev;
-          const res = await patchAso(rowId, aso, rev);
-          if (typeof res.rev === 'number') {
-            asoRev.current.set(rowId, res.rev);
-            const nr = res.rev;
-            updateLocal((rows) => rows.map((r) => (r.id === rowId ? { ...r, rev: nr } : r)));
-          }
-        })
-        .catch((e: Error) => {
-          asoDead.current.add(rowId);
-          asoChain.current.delete(rowId);
-          asoRev.current.delete(rowId);
-          if (e instanceof ConflictError) {
-            notify('Row changed on another device — reloading', true);
-          } else {
-            notify(`ASO save failed: ${e.message}`, true);
-          }
-          reload();
-        });
-      asoChain.current.set(rowId, task.catch(() => undefined));
+      if (rowDead.current.has(rowId)) return; // a real conflict reloaded; drop stale saves
+      enqueueRowWrite(rowId, 'ASO save', (rev) => patchAso(rowId, aso, rev));
     },
-    [notify, reload, updateLocal],
+    [enqueueRowWrite],
   );
 
   const handleAsoChange = useCallback(
     (row: RowDto, aso: AsoMed[]) => {
       updateLocal((rows) => rows.map((r) => (r.id === row.id ? { ...r, aso } : r)));
-      asoDead.current.delete(row.id); // user is typing again — clear any conflict flag
+      rowDead.current.delete(row.id); // user is typing again — clear any conflict flag
       const prev = asoTimer.current.get(row.id);
       if (prev) window.clearTimeout(prev);
       asoTimer.current.set(

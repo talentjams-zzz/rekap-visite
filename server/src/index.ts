@@ -125,7 +125,15 @@ app.get('/api/health', async () => {
     },
     // v2.1 observability: how many actual v1 file exports have run this
     // boot (coalesced — NOT one per change) + whether one is in flight.
-    writeback: { writes: wb.writes, running: wb.running },
+    // v2.1.1 (review F5): pending + lastError — a FAILED export stays
+    // pending (owed), so operators can see a stale v1 file instead of a
+    // silent "everything fine".
+    writeback: {
+      writes: wb.writes,
+      running: wb.running,
+      pending: wb.pending,
+      lastError: wb.lastError ? String(wb.lastError) : null,
+    },
     dbFile,
   };
 });
@@ -388,10 +396,16 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     shuttingDown = true;
     const bail = setTimeout(() => process.exit(0), 10_000);
     wb.stop();
-    void wb.settle().finally(() => {
-      clearTimeout(bail);
-      process.exit(0);
-    });
+    void wb.settle()
+      .catch((e) => {
+        // Review F5: shutdown must not declare success over unresolved
+        // work. The v1 fallback file is now STALE — say so, loudly.
+        console.error(`[shutdown] write-back NOT flushed (v1 file may be stale): ${e}`);
+      })
+      .finally(() => {
+        clearTimeout(bail);
+        process.exit(0);
+      });
   });
 }
 

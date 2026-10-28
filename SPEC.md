@@ -138,6 +138,35 @@ untouched until E2E passes on v2.
 - **gzip/br** on JSON payloads; stable row handler identity so memoized
   body rows skip re-render during drags/edits.
 
+### v2.1.1 correctness fixes (review round 2)
+- **Staged lab commits** — a lab upload now runs in two phases: (1) stream
+  + parse + dedupe with NO transaction open (an overlapping request can no
+  longer roll back another request's in-flight transaction — the old code
+  held `BEGIN` across the whole multipart stream), then (2) one short
+  synchronous commit of everything staged (no network await inside, so the
+  event loop can't interleave mid-transaction). A mid-chunk DB failure
+  rolls back that transaction only: nothing from the batch persists, the
+  response's "nothing was saved" is true, and no change event fires. A
+  duplicate that only appears at commit (concurrent identical upload) is
+  demoted per-row instead of failing the chunk.
+- **Write-back failure semantics** — a failed export stays PENDING (not
+  silently dropped): the queue records `lastError`, exposes `pending` /
+  `lastError` in `/api/health`, retries on the next change after one quiet
+  window (no hot-spin), and `settle()` REJECTS over unresolved work so
+  shutdown logs "v1 file may be stale" instead of exiting clean.
+- **Shared per-row write coordinator** — checklist chips, field edits,
+  archive toggles and ASO saves all advance the same server row revision
+  and now share ONE per-row rev map + ONE per-row promise chain. A
+  successful write from any control updates the shared rev, so a delayed
+  response from one control can no longer make another control self-409.
+  Server-side `toggle` on the check endpoints (the server flips its own
+  current value) makes rapid same-chip double-clicks compose correctly
+  even from a stale render; stale-rev 409s are preserved for genuine
+  cross-device conflicts. Successful loads RECONCILE the rev source with
+  the loaded rows (never blind-clear), and the rev fallback is the freshly
+  loaded row — never a click-time snapshot — so a refresh landing between
+  queued writes can't lose the queued write.
+
 ## Testing
 - **Unit (Vitest)**: filename → facility/date parsing; registry/handover/lab
   parsers; merge rules (latest-file-wins, riwayat append, same-day
